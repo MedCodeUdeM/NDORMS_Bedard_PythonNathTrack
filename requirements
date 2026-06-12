@@ -1,0 +1,9 @@
+opencv-contrib-python
+numpy
+scipy
+matplotlib
+filterpy
+imageio
+scikit-image
+pandas
+jupyter

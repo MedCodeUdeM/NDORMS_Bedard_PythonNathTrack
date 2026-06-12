@@ -13,11 +13,11 @@ class HoughDetector:
 
     def __init__(self,
                  angle_min: float = 10.0,
-                 angle_max: float = 40.0,
-                 canny_low: int = 30,
+                 angle_max: float = 40.0, # Only keep lines in this angular range (10°–40°), filtering out noise/aponeuroses
+                 canny_low: int = 30, # Trouve les edges avec Canny (30, 90). Gaussian blur, gradient computation (Comment les gradients changent)
                  canny_high: int = 90,
                  hough_threshold: int = 40,
-                 min_line_length: int = 30,
+                 min_line_length: int = 30, # Longueur minimale des segments détectés
                  max_line_gap: int = 10):
 
         self.angle_min = angle_min
@@ -43,7 +43,7 @@ class HoughDetector:
 
         # Détection de contours
         edges = cv2.Canny(enhanced, self.canny_low, self.canny_high,
-                          apertureSize=3)
+                          apertureSize=3) # Size du Sobel Kernel pour le gradients est 3
 
         # Hough transform probabiliste
         lines = cv2.HoughLinesP(
