@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from .preprocessing import preprocess
+from . import geometry
 
 
 class HoughDetector:
@@ -41,11 +42,9 @@ class HoughDetector:
         """
         enhanced = preprocess(frame, contrast=True, blur=True)
 
-        # Détection de contours
         edges = cv2.Canny(enhanced, self.canny_low, self.canny_high,
-                          apertureSize=3) # Size du Sobel Kernel pour le gradients est 3
+                          apertureSize=3)
 
-        # Hough transform probabiliste
         lines = cv2.HoughLinesP(
             edges,
             rho=1,
@@ -58,27 +57,76 @@ class HoughDetector:
         if lines is None:
             return None, None, None
 
-        lines = lines[:, 0, :]   # shape (N, 4)
+        lines = lines[:, 0, :].astype(np.float32)  # (N, 4)
 
-        # Filtrage angulaire
-        filtered, angles, lengths = [], [], []
+        # ── Utilise geometry.py pour les calculs ──────────────────────────
+        angles = geometry.line_angles_batch(lines, degrees=True)
+        lengths = geometry.line_lengths_batch(lines)
 
-        for x1, y1, x2, y2 in lines:
-            dx, dy = x2 - x1, y2 - y1
-            angle = np.degrees(np.arctan2(abs(dy), abs(dx)))
-            length = np.hypot(dx, dy)
+        filtered_lines, filtered_angles = geometry.filter_lines_by_angle(
+            lines, angles, self.angle_min, self.angle_max
+        )
+        filtered_lengths = lengths[
+            (angles >= self.angle_min) & (angles <= self.angle_max)
+            ]
+        # ──────────────────────────────────────────────────────────────────
 
-            if self.angle_min <= angle <= self.angle_max:
-                filtered.append([x1, y1, x2, y2])
-                angles.append(angle)
-                lengths.append(length)
-
-        if not filtered:
+        if len(filtered_lines) == 0:
             return None, None, None
 
-        return (np.array(filtered),
-                np.array(angles),
-                np.array(lengths))
+        return filtered_lines, filtered_angles, filtered_lengths
+
+    # def detect(self, frame: np.ndarray):
+    #     """
+    #     Détecte les fascicules dans une frame.
+    #
+    #     Retourne
+    #     --------
+    #     lines   : np.ndarray (N, 4) — segments (x1,y1,x2,y2)
+    #     angles  : np.ndarray (N,)   — angle de chaque segment (°)
+    #     lengths : np.ndarray (N,)   — longueur de chaque segment (px)
+    #     None, None, None si aucun fascicule détecté
+    #     """
+    #     enhanced = preprocess(frame, contrast=True, blur=True)
+    #
+    #     # Détection de contours
+    #     edges = cv2.Canny(enhanced, self.canny_low, self.canny_high,
+    #                       apertureSize=3) # Size du Sobel Kernel pour le gradients est 3
+    #
+    #     # Hough transform probabiliste
+    #     lines = cv2.HoughLinesP(
+    #         edges,
+    #         rho=1,
+    #         theta=np.pi / 180,
+    #         threshold=self.hough_threshold,
+    #         minLineLength=self.min_line_length,
+    #         maxLineGap=self.max_line_gap
+    #     )
+    #
+    #     if lines is None:
+    #         return None, None, None
+    #
+    #     lines = lines[:, 0, :]   # shape (N, 4)
+    #
+    #     # Filtrage angulaire
+    #     filtered, angles, lengths = [], [], []
+    #
+    #     for x1, y1, x2, y2 in lines:
+    #         dx, dy = x2 - x1, y2 - y1
+    #         angle = np.degrees(np.arctan2(abs(dy), abs(dx)))
+    #         length = np.hypot(dx, dy)
+    #
+    #         if self.angle_min <= angle <= self.angle_max:
+    #             filtered.append([x1, y1, x2, y2])
+    #             angles.append(angle)
+    #             lengths.append(length)
+    #
+    #     if not filtered:
+    #         return None, None, None
+    #
+    #     return (np.array(filtered),
+    #             np.array(angles),
+    #             np.array(lengths))
 
     def estimate(self, frame: np.ndarray):
         """
