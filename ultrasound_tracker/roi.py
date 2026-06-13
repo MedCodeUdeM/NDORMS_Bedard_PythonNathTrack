@@ -290,3 +290,101 @@ def load_rois(path: Union[str, Path]) -> Dict[str, ROI]:
         name: tuple(int(v) for v in roi)
         for name, roi in data.items()
     }
+
+# ============================================================================
+# ROI LOCAL ↔ GLOBAL COORDINATE CONVERSIONS
+# ============================================================================
+
+def line_local_to_global(line, roi: ROI):
+    """
+    Convert one line [x1, y1, x2, y2] from ROI-local coordinates
+    to global/full-frame coordinates.
+
+    Parameters
+    ----------
+    line : np.ndarray shape (4,) or None
+    roi : tuple
+        (x, y, w, h)
+
+    Returns
+    -------
+    global_line : np.ndarray shape (4,) or None
+    """
+    if line is None:
+        return None
+
+    x, y, w, h = roi
+
+    out = np.asarray(line, dtype=np.float32).copy()
+    out[[0, 2]] += x
+    out[[1, 3]] += y
+
+    return out
+
+
+def lines_local_to_global(lines, roi: ROI):
+    """
+    Convert multiple lines from ROI-local coordinates to global coordinates.
+
+    Parameters
+    ----------
+    lines : np.ndarray shape (N, 4) or None
+    roi : tuple
+        (x, y, w, h)
+
+    Returns
+    -------
+    global_lines : np.ndarray shape (N, 4) or None
+    """
+    if lines is None:
+        return None
+
+    x, y, w, h = roi
+
+    out = np.asarray(lines, dtype=np.float32).copy()
+    out[:, [0, 2]] += x
+    out[:, [1, 3]] += y
+
+    return out
+
+
+def point_local_to_global(point, roi: ROI):
+    """
+    Convert one point [x, y] from ROI-local coordinates to global coordinates.
+    """
+    if point is None:
+        return None
+
+    x, y, w, h = roi
+
+    out = np.asarray(point, dtype=np.float32).copy()
+    out[0] += x
+    out[1] += y
+
+    return out
+
+
+def points_local_to_global(points, roi: ROI):
+    """
+    Convert points [[x, y], ...] from ROI-local coordinates to global coordinates.
+
+    Parameters
+    ----------
+    points : np.ndarray shape (N, 2) or None
+    roi : tuple
+        (x, y, w, h)
+
+    Returns
+    -------
+    global_points : np.ndarray shape (N, 2) or None
+    """
+    if points is None:
+        return None
+
+    x, y, w, h = roi
+
+    out = np.asarray(points, dtype=np.float32).copy()
+    out[:, 0] += x
+    out[:, 1] += y
+
+    return out

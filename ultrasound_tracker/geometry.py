@@ -12,7 +12,7 @@ Convention: angle = atan2(-dy, dx)  →  matches MATLAB atan2d(-dy, dx)
 """
 
 import numpy as np
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 
 # ============================================================================
@@ -567,6 +567,282 @@ def clip_line_to_image(line: np.ndarray,
     out[3] = np.clip(out[3], 0, img_height - 1)
     return out
 
+# ============================================================================
+# FASCICLE / APONEUROSIS GEOMETRY
+# ============================================================================
+
+def point_inside_image(point: np.ndarray,
+                       frame_shape: Tuple[int, int],
+                       margin: int = 50) -> bool:
+    """
+    Check whether a point is inside image boundaries, allowing a margin.
+
+    Parameters
+    ----------
+    point : np.ndarray shape (2,)
+        Point as [x, y].
+    frame_shape : tuple
+        Image shape as (height, width) or (height, width, channels).
+    margin : int
+        Tolerance in pixels outside the image boundaries.
+
+    Returns
+    -------
+    bool
+    """
+    if point is None:
+        return False
+
+    point = np.asarray(point, dtype=np.float32)
+
+    if point.shape[0] < 2 or not np.all(np.isfinite(point[:2])):
+        return False
+
+    h, w = frame_shape[:2]
+    x, y = point[:2]
+
+    return (
+        -margin <= x <= w - 1 + margin
+        and -margin <= y <= h - 1 + margin
+    )
+
+
+def fascicle_segment_between_aponeuroses(fascicle_line: np.ndarray,
+                                         superficial_apo_line: np.ndarray,
+                                         deep_apo_line: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Compute the true fascicle segment between the superficial and deep aponeuroses.
+
+    This is the key UltraTimTrack-style geometry:
+        fascicle line ∩ superficial aponeurosis
+        fascicle line ∩ deep aponeurosis
+
+    Parameters
+    ----------
+    fascicle_line : np.ndarray shape (4,)
+        [x1, y1, x2, y2]
+    superficial_apo_line : np.ndarray shape (4,)
+        [x1, y1, x2, y2]
+    deep_apo_line : np.ndarray shape (4,)
+        [x1, y1, x2, y2]
+
+    Returns
+    -------
+    segment : np.ndarray shape (4,) or None
+        [x_sup, y_sup, x_deep, y_deep]
+    """
+    if fascicle_line is None or superficial_apo_line is None or deep_apo_line is None:
+        return None
+
+    p_sup = line_intersection(*fascicle_line, *superficial_apo_line)
+    p_deep = line_intersection(*fascicle_line, *deep_apo_line)
+
+    if p_sup is None or p_deep is None:
+        return None
+
+    p_sup = np.asarray(p_sup, dtype=np.float32)
+    p_deep = np.asarray(p_deep, dtype=np.float32)
+
+    return np.array([
+        p_sup[0], p_sup[1],
+        p_deep[0], p_deep[1],
+    ], dtype=np.float32)
+
+
+def fascicle_length_between_aponeuroses(fascicle_line: np.ndarray,
+                                        superficial_apo_line: np.ndarray,
+                                        deep_apo_line: np.ndarray) -> Optional[float]:
+    """
+    Compute true fascicle length between the superficial and deep aponeuroses.
+
+    Returns
+    -------
+    length : float or None
+    """
+    segment = fascicle_segment_between_aponeuroses(
+        fascicle_line,
+        superficial_apo_line,
+        deep_apo_line,
+    )
+
+    if segment is None:
+        return None
+
+    return float(line_length_from_array(segment))
+
+
+def compute_fascicle_geometry(superficial_apo_line: np.ndarray,
+                              deep_apo_line: np.ndarray,
+                              fascicle_line: np.ndarray) -> Dict:
+    """
+    Compute final fascicle geometry from:
+      - superficial aponeurosis line
+      - deep aponeurosis line
+      - fascicle line
+
+    This function should be the main geometry output used by notebook 11.
+
+    Parameters
+    ----------
+    superficial_apo_line : np.ndarray shape (4,)
+    deep_apo_line : np.ndarray shape (4,)
+    fascicle_line : np.ndarray shape (4,)
+
+    Returns
+    -------
+    features : dict
+        {
+            "sup_attachment": np.ndarray shape (2,),
+            "deep_attachment": np.ndarray shape (2,),
+            "fascicle_segment_between_apos": np.ndarray shape (4,),
+            "fascicle_length_px": float,
+            "fascicle_angle_deg": float,
+            "deep_apo_angle_deg": float,
+            "pennation_angle_deg": float,
+        }
+    """
+    if superficial_apo_line is None:
+        raise ValueError("superficial_apo_line is None.")
+
+    if deep_apo_line is None:
+        raise ValueError("deep_apo_line is None.")
+
+    if fascicle_line is None:
+        raise ValueError("fascicle_line is None.")
+
+    p_sup = line_intersection(*fascicle_line, *superficial_apo_line)
+    p_deep = line_intersection(*fascicle_line, *deep_apo_line)
+
+    if p_sup is None:
+        raise ValueError("Fascicle line does not intersect superficial aponeurosis.")
+
+    if p_deep is None:
+        raise ValueError("Fascicle line does not intersect deep aponeurosis.")
+
+    sup_attachment = np.asarray(p_sup, dtype=np.float32)
+    deep_attachment = np.asarray(p_deep, dtype=np.float32)
+
+    fascicle_segment = np.array([
+        sup_attachment[0],
+        sup_attachment[1],
+        deep_attachment[0],
+        deep_attachment[1],
+    ], dtype=np.float32)
+
+    fascicle_length_px = line_length_from_array(fascicle_segment)
+
+    fascicle_angle_deg = normalize_angle(
+        line_angle_from_array(fascicle_line),
+        degrees=True,
+    )
+
+    deep_apo_angle_deg = normalize_angle(
+        line_angle_from_array(deep_apo_line),
+        degrees=True,
+    )
+
+    pennation_angle_deg = pennation_angle(
+        fascicle_angle_deg,
+        deep_apo_angle_deg,
+        degrees=True,
+    )
+
+    return {
+        "sup_attachment": sup_attachment,
+        "deep_attachment": deep_attachment,
+        "fascicle_segment_between_apos": fascicle_segment,
+        "fascicle_length_px": float(fascicle_length_px),
+        "fascicle_angle_deg": float(fascicle_angle_deg),
+        "deep_apo_angle_deg": float(deep_apo_angle_deg),
+        "pennation_angle_deg": float(pennation_angle_deg),
+    }
+
+
+def pick_best_fascicle_line(lines: Optional[np.ndarray],
+                            lengths: Optional[np.ndarray] = None,
+                            superficial_apo_line: Optional[np.ndarray] = None,
+                            deep_apo_line: Optional[np.ndarray] = None,
+                            frame_shape: Optional[Tuple[int, int]] = None,
+                            margin: int = 50) -> Optional[np.ndarray]:
+    """
+    Pick the best fascicle line from candidate Hough/Frangi lines.
+
+    Priority:
+      1. If aponeuroses are provided, choose a line that intersects both
+         aponeuroses and maximizes the segment length between them.
+      2. Otherwise, choose the longest candidate line.
+
+    Parameters
+    ----------
+    lines : np.ndarray or None
+        Candidate lines, shape (N, 4), each [x1, y1, x2, y2].
+    lengths : np.ndarray or None
+        Candidate line lengths.
+    superficial_apo_line : np.ndarray or None
+        Superficial aponeurosis line [x1, y1, x2, y2].
+    deep_apo_line : np.ndarray or None
+        Deep aponeurosis line [x1, y1, x2, y2].
+    frame_shape : tuple or None
+        Full image shape as (height, width).
+    margin : int
+        Allowed margin when validating intersection points.
+
+    Returns
+    -------
+    best_line : np.ndarray shape (4,) or None
+    """
+    if lines is None or len(lines) == 0:
+        return None
+
+    lines = np.asarray(lines, dtype=np.float32)
+
+    if lengths is None:
+        lengths = line_lengths_batch(lines)
+    else:
+        lengths = np.asarray(lengths, dtype=np.float32)
+
+    if superficial_apo_line is not None and deep_apo_line is not None:
+        best_line = None
+        best_score = -np.inf
+
+        for i, line in enumerate(lines):
+            segment = fascicle_segment_between_aponeuroses(
+                line,
+                superficial_apo_line,
+                deep_apo_line,
+            )
+
+            if segment is None:
+                continue
+
+            p_sup = segment[:2]
+            p_deep = segment[2:]
+
+            if frame_shape is not None:
+                if not point_inside_image(p_sup, frame_shape, margin=margin):
+                    continue
+                if not point_inside_image(p_deep, frame_shape, margin=margin):
+                    continue
+
+            true_length = line_length_from_array(segment)
+
+            if not np.isfinite(true_length) or true_length <= 0:
+                continue
+
+            # Main criterion: true length between aponeuroses.
+            # Small bonus: detected candidate segment length.
+            score = true_length + 0.05 * lengths[i]
+
+            if score > best_score:
+                best_score = score
+                best_line = line
+
+        if best_line is not None:
+            return best_line.astype(np.float32)
+
+    # Fallback: longest detected line.
+    idx = int(np.argmax(lengths))
+    return lines[idx].astype(np.float32)
 
 # ============================================================================
 # QUICK SELF-TEST
@@ -594,3 +870,4 @@ if __name__ == "__main__":
     print(g)
 
     print("✓ All tests passed!")
+
