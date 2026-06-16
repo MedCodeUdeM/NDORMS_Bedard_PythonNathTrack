@@ -7,3 +7,4 @@ imageio
 scikit-image
 pandas
 jupyter
+pytest
