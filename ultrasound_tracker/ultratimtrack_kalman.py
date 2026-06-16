@@ -104,13 +104,14 @@ def segment_from_state(state: np.ndarray) -> np.ndarray:
 
     Notes
     -----
-    The project geometry convention used earlier was:
-        angle = +45° for a line going up-right
-        angle = -45° for a line going down-right
+    The state stores a normalized fascicle angle, so it does not preserve the
+    180° direction of the original segment. For the MATLAB UltraTimTrack-style
+    geometry used here, the stored superficial attachment is usually the
+    right/upper point and the deep attachment is down-left from it.
 
     Therefore:
-        x_deep = x_sup + L*cos(theta)
-        y_deep = y_sup - L*sin(theta)
+        x_deep = x_sup - L*cos(theta)
+        y_deep = y_sup + L*sin(theta)
     """
     state = _as_float_array(state, shape=(STATE_SIZE,))
 
@@ -121,8 +122,8 @@ def segment_from_state(state: np.ndarray) -> np.ndarray:
 
     theta = np.deg2rad(angle_deg)
 
-    x_deep = x_sup + length_px * np.cos(theta)
-    y_deep = y_sup - length_px * np.sin(theta)
+    x_deep = x_sup - length_px * np.cos(theta)
+    y_deep = y_sup + length_px * np.sin(theta)
 
     return np.array(
         [x_sup, y_sup, x_deep, y_deep],
