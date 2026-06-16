@@ -3,8 +3,9 @@ MATLAB-style TimTrack Hough helpers.
 
 This module ports the small pieces used by UltraTimTrack's TimTrack path:
 ``weightedMedian.m``, ``dohough.m``, and the helper ``hough_bin_pixels.m``.
-The goal is numerical compatibility for validation notebooks, not a replacement
-for the older OpenCV probabilistic Hough detector.
+The helpers are intentionally small so validation notebooks can compare the
+MATLAB-style weighted-median angle estimator against the older OpenCV
+probabilistic Hough detector.
 """
 
 from __future__ import annotations
@@ -303,6 +304,43 @@ def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
         "X": x_lines,
         "Y": y_lines,
     }
+
+
+def estimate_fascicle_alpha_dohough(
+    binary_mask: np.ndarray,
+    *,
+    emask_radius: Optional[Tuple[float, float]] = None,
+    angle_range: Tuple[float, float] = (8.0, 80.0),
+    thetares: float = 1.0,
+    rhores: float = 1.0,
+    npeaks: int = 10,
+    houghangles: str = "specified",
+    replace_diagonal_bias: bool = True,
+) -> dict:
+    """
+    Estimate fascicle alpha from a binary fascicle mask using MATLAB-style Hough.
+
+    This is the compatibility layer for the current Python sequence workflow:
+    keep the existing fascicle mask, but replace the selected-segment angle with
+    the weighted median alpha returned by UltraTimTrack's ``dohough.m`` path.
+    """
+    bw = np.asarray(binary_mask).astype(bool)
+    if bw.ndim != 2:
+        raise ValueError("binary_mask must be a 2D image.")
+
+    if emask_radius is None:
+        emask_radius = (bw.shape[0] / 2.0, bw.shape[1] / 2.0)
+
+    params = DoHoughParams(
+        houghangles=houghangles,
+        angle_range=angle_range,
+        thetares=thetares,
+        rhores=rhores,
+        emask_radius=emask_radius,
+        npeaks=npeaks,
+        replace_diagonal_bias=replace_diagonal_bias,
+    )
+    return dohough(bw, params)
 
 
 def fascicle_ellipse_mask(

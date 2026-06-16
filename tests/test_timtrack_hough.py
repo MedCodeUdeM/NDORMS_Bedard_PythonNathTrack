@@ -3,6 +3,7 @@ import numpy as np
 from ultrasound_tracker.timtrack_hough import (
     DoHoughParams,
     dohough,
+    estimate_fascicle_alpha_dohough,
     hough_bin_pixels,
     matlab_hough_accumulator,
     matlab_theta_from_range,
@@ -70,3 +71,16 @@ def test_dohough_recovers_synthetic_up_right_fascicle_angle():
     assert np.isclose(result["alpha"], 25.0, atol=2.5)
     assert result["alphas"].size > 0
     assert result["weights"].size == result["alphas"].size
+
+
+def test_estimate_fascicle_alpha_dohough_recovers_known_segment():
+    image = _draw_up_right_line(alpha_deg=32.0)
+
+    result = estimate_fascicle_alpha_dohough(
+        image,
+        npeaks=5,
+    )
+
+    assert np.isfinite(result["alpha"])
+    assert np.isclose(result["alpha"], 32.0, atol=2.5)
+    assert result["peaks"].shape[0] > 0
