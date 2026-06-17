@@ -3,7 +3,13 @@ from .klt_tracker import KLTTracker
 from .hough_detector import HoughDetector
 from .frangi_detector import FrangiDetector
 from .kalman_fusion import FascicleKalman
-from .speckle import SpeckleTracker
+from .speckle import (
+    SpeckleCoherenceParams,
+    SpeckleTracker,
+    compute_speckle_confidence_for_frames,
+    robust_mad_sigma,
+    speckle_pair_confidence,
+)
 from .optical_flow_dense import DenseFlowTracker
 from .utils import plot_results, save_results
 from .final_output import (
