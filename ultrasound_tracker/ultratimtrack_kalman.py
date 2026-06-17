@@ -45,6 +45,7 @@ from .geometry import (
     pennation_angle,
     compute_fascicle_geometry,
 )
+from .final_output import final_outputs_from_lines
 
 
 IDX_X_SUP = 0
@@ -652,6 +653,12 @@ def run_geometric_ultratimtrack_fusion(
     klt_segments: np.ndarray,
     timtrack_deep_apo_lines: Optional[np.ndarray] = None,
     config: Optional[UltraTimTrackKalmanConfig] = None,
+    *,
+    timtrack_superficial_apo_lines: Optional[np.ndarray] = None,
+    x_eval: float = 20.0,
+    pennation_reference: str = "superficial",
+    mm_per_pixel: Optional[float] = None,
+    normalize_pennation: bool = False,
 ) -> Dict:
     """
     Convenience function to run geometric UltraTimTrack-like fusion on arrays.
@@ -663,8 +670,22 @@ def run_geometric_ultratimtrack_fusion(
     klt_segments : np.ndarray shape (N, 4)
         Sequential KLT/UltraTrack-like fascicle segments.
     timtrack_deep_apo_lines : np.ndarray shape (N, 4), optional
-        Used only to compute pennation angle.
+        Deep aponeurosis lines. With superficial lines, these are used for the
+        final MATLAB-style FL/PEN/ANG output path. Without superficial lines,
+        they are used only for legacy deep-aponeurosis pennation.
     config : UltraTimTrackKalmanConfig, optional
+    timtrack_superficial_apo_lines : np.ndarray shape (N, 4), optional
+        Superficial aponeurosis lines. When provided with deep lines, exported
+        fascicle length is computed as thickness / sin(pennation), while the
+        state segment length is kept separately for debugging.
+    x_eval : float
+        X coordinate used for MATLAB-style aponeurosis thickness evaluation.
+    pennation_reference : {"superficial", "deep"}
+        Aponeurosis used as PEN reference in the final-output formula path.
+    mm_per_pixel : float, optional
+        Optional conversion factor for FL_mm.
+    normalize_pennation : bool
+        Whether to wrap PEN to [-90, 90) in the final-output formula path.
 
     Returns
     -------
@@ -682,9 +703,14 @@ def run_geometric_ultratimtrack_fusion(
     uncertainties = np.full((n, STATE_SIZE), np.nan, dtype=np.float32)
 
     length_px = np.full(n, np.nan, dtype=np.float32)
+    state_length_px = np.full(n, np.nan, dtype=np.float32)
     fascicle_angle_deg = np.full(n, np.nan, dtype=np.float32)
+    super_apo_angle_deg = np.full(n, np.nan, dtype=np.float32)
     deep_apo_angle_deg = np.full(n, np.nan, dtype=np.float32)
     pennation_angle_deg = np.full(n, np.nan, dtype=np.float32)
+    muscle_thickness_px = np.full(n, np.nan, dtype=np.float32)
+    fascicle_length_mm = np.full(n, np.nan, dtype=np.float32)
+    used_final_output_formula = np.zeros(n, dtype=bool)
 
     success = np.zeros(n, dtype=bool)
     errors = np.array([""] * n, dtype=object)
@@ -706,12 +732,19 @@ def run_geometric_ultratimtrack_fusion(
             )
 
             deep_apo_line = None
+            superficial_apo_line = None
 
             if timtrack_deep_apo_lines is not None:
                 candidate_deep = timtrack_deep_apo_lines[i]
 
                 if np.all(np.isfinite(candidate_deep)):
                     deep_apo_line = candidate_deep
+
+            if timtrack_superficial_apo_lines is not None:
+                candidate_superficial = timtrack_superficial_apo_lines[i]
+
+                if np.all(np.isfinite(candidate_superficial)):
+                    superficial_apo_line = candidate_superficial
 
             geom_features = filt.get_geometry(
                 deep_apo_line=deep_apo_line,
@@ -721,24 +754,61 @@ def run_geometric_ultratimtrack_fusion(
             filtered_segments[i] = geom_features["fascicle_segment_between_apos"]
             uncertainties[i] = filt.get_uncertainty()
 
+            state_length_px[i] = geom_features["fascicle_length_px"]
             length_px[i] = geom_features["fascicle_length_px"]
             fascicle_angle_deg[i] = geom_features["fascicle_angle_deg"]
             deep_apo_angle_deg[i] = geom_features["deep_apo_angle_deg"]
             pennation_angle_deg[i] = geom_features["pennation_angle_deg"]
+
+            if superficial_apo_line is not None and deep_apo_line is not None:
+                final_outputs = final_outputs_from_lines(
+                    geom_features["fascicle_angle_deg"],
+                    superficial_apo_line,
+                    deep_apo_line,
+                    x_eval=x_eval,
+                    pennation_reference=pennation_reference,
+                    mm_per_pixel=mm_per_pixel,
+                    normalize_pennation=normalize_pennation,
+                )
+
+                length_px[i] = final_outputs["FL_px"][0]
+                pennation_angle_deg[i] = final_outputs["PEN_deg"][0]
+                super_apo_angle_deg[i] = final_outputs["super_apo_angle_deg"][0]
+                deep_apo_angle_deg[i] = final_outputs["deep_apo_angle_deg"][0]
+                muscle_thickness_px[i] = final_outputs["muscle_thickness_px"][0]
+
+                if "FL_mm" in final_outputs:
+                    fascicle_length_mm[i] = final_outputs["FL_mm"][0]
+
+                used_final_output_formula[i] = True
 
             success[i] = True
 
         except Exception as exc:
             errors[i] = str(exc)
 
-    return {
+    results = {
         "success": success,
         "error": errors,
         "filtered_states": filtered_states,
         "filtered_segments": filtered_segments,
         "uncertainties": uncertainties,
         "fascicle_length_px": length_px,
+        "final_fascicle_length_px": length_px.copy(),
+        "state_fascicle_length_px": state_length_px,
         "fascicle_angle_deg": fascicle_angle_deg,
+        "super_apo_angle_deg": super_apo_angle_deg,
         "deep_apo_angle_deg": deep_apo_angle_deg,
         "pennation_angle_deg": pennation_angle_deg,
+        "muscle_thickness_px": muscle_thickness_px,
+        "used_final_output_formula": used_final_output_formula,
+        "ANG_deg": fascicle_angle_deg.copy(),
+        "PEN_deg": pennation_angle_deg.copy(),
+        "FL_px": length_px.copy(),
     }
+
+    if mm_per_pixel is not None:
+        results["fascicle_length_mm"] = fascicle_length_mm
+        results["FL_mm"] = fascicle_length_mm.copy()
+
+    return results

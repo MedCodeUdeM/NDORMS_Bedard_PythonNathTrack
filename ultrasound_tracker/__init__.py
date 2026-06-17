@@ -6,7 +6,13 @@ from .kalman_fusion import FascicleKalman
 from .speckle import SpeckleTracker
 from .optical_flow_dense import DenseFlowTracker
 from .utils import plot_results, save_results
+from .final_output import (
+    aponeurosis_thickness_px,
+    final_outputs_from_components,
+    final_outputs_from_lines,
+    image_depth_to_mm_per_pixel,
+)
 from . import geometry
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"
 __author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "

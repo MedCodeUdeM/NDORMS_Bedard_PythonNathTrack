@@ -36,6 +36,10 @@ from ultrasound_tracker.matlab_compat import (
     load_matlab_result,
     metric_row,
 )
+from ultrasound_tracker.final_output import (
+    final_outputs_from_components,
+    image_depth_to_mm_per_pixel,
+)
 
 
 def read_first_frame_height(video_path: Path) -> int:
@@ -72,6 +76,49 @@ def add_row(
     rows.append(metric_row(name, ref, est))
 
 
+def build_final_output_estimate(data: Dict[str, np.ndarray], mm_per_pixel: float) -> Dict[str, np.ndarray]:
+    """Return FL/PEN/ANG arrays from either legacy or package-style NPZ keys."""
+    if {"FL_mm", "PEN_deg", "ANG_deg"}.issubset(data):
+        return {
+            "FL_mm": data["FL_mm"],
+            "PEN_deg": data["PEN_deg"],
+            "ANG_deg": data["ANG_deg"],
+        }
+
+    if {
+        "fascicle_angle_deg",
+        "super_apo_angle_deg",
+        "muscle_thickness_px",
+    }.issubset(data):
+        out = final_outputs_from_components(
+            data["fascicle_angle_deg"],
+            data["super_apo_angle_deg"],
+            data["muscle_thickness_px"],
+            mm_per_pixel=mm_per_pixel,
+        )
+        return {
+            "FL_mm": out["FL_mm"],
+            "PEN_deg": out["PEN_deg"],
+            "ANG_deg": out["ANG_deg"],
+        }
+
+    if {
+        "utt_fascicle_length_px",
+        "utt_pennation_angle_deg",
+        "utt_fascicle_angle_deg",
+    }.issubset(data):
+        return {
+            "FL_mm": data["utt_fascicle_length_px"] * mm_per_pixel,
+            "PEN_deg": data["utt_pennation_angle_deg"],
+            "ANG_deg": data["utt_fascicle_angle_deg"],
+        }
+
+    raise KeyError(
+        "Could not infer final output arrays. Expected package keys "
+        "(FL_mm/PEN_deg/ANG_deg), TimTrack component keys, or legacy UTT keys."
+    )
+
+
 def write_csv(path: Path, rows: List[Dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -101,7 +148,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--python-timtrack",
         type=Path,
-        default=Path("results/timtrack_sequence_features_arrays.npz"),
+        default=Path("results/timtrack_sequence_dohough_alpha_features_arrays.npz"),
         help="Path to Python TimTrack-like NPZ output.",
     )
     parser.add_argument(
@@ -149,7 +196,10 @@ def main() -> int:
     if not np.isfinite(image_depth_mm):
         raise RuntimeError("Could not read TrackingData.res from MATLAB result.")
 
-    mm_per_pixel = image_depth_mm / float(image_height_px)
+    mm_per_pixel = image_depth_to_mm_per_pixel(image_depth_mm, image_height_px)
+
+    python_utt_final = build_final_output_estimate(python_utt, mm_per_pixel)
+    python_tim_final = build_final_output_estimate(python_tim, mm_per_pixel)
 
     rows: List[Dict] = []
 
@@ -157,21 +207,21 @@ def main() -> int:
         rows,
         "final_FL_mm",
         matlab_final["length_mm"],
-        python_utt["utt_fascicle_length_px"] * mm_per_pixel,
+        python_utt_final["FL_mm"],
         args.estimate_offset,
     )
     add_row(
         rows,
         "final_PEN_deg",
         matlab_final["pennation_deg"],
-        python_utt["utt_pennation_angle_deg"],
+        python_utt_final["PEN_deg"],
         args.estimate_offset,
     )
     add_row(
         rows,
         "final_ANG_deg",
         matlab_final["fascicle_angle_deg"],
-        python_utt["utt_fascicle_angle_deg"],
+        python_utt_final["ANG_deg"],
         args.estimate_offset,
     )
 
@@ -186,16 +236,24 @@ def main() -> int:
         rows,
         "timtrack_phi_vs_python_pen_deg",
         matlab_geo["phi_deg"],
-        python_tim["pennation_angle_deg"],
+        python_tim_final["PEN_deg"],
         args.estimate_offset,
     )
     add_row(
         rows,
-        "timtrack_faslen_px",
+        "timtrack_formula_faslen_px",
         matlab_geo["faslen_px"],
-        python_tim["fascicle_length_px"],
+        python_tim_final["FL_mm"] / mm_per_pixel,
         args.estimate_offset,
     )
+    if "selected_line_length_px" in python_tim:
+        add_row(
+            rows,
+            "timtrack_selected_segment_length_px_debug",
+            matlab_geo["faslen_px"],
+            python_tim["selected_line_length_px"],
+            args.estimate_offset,
+        )
     add_row(
         rows,
         "timtrack_gamma_deep_apo_deg",
