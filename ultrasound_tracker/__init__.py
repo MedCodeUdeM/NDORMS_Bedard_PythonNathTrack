@@ -8,5 +8,5 @@ from .optical_flow_dense import DenseFlowTracker
 from .utils import plot_results, save_results
 from . import geometry
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 __author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "
