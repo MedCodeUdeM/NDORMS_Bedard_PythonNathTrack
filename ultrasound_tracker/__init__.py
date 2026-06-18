@@ -2,6 +2,16 @@ from .preprocessing import load_video, preprocess
 from .klt_tracker import KLTTracker
 from .hough_detector import HoughDetector
 from .frangi_detector import FrangiDetector
+from .matlab_aponeurosis import (
+    MatlabHoughAponeurosisConfig,
+    MatlabHoughAponeurosisDetector,
+    adaptive_threshold_matlab_style,
+    detect_matlab_hough_aponeuroses,
+    fit_apo_matlab_like,
+    get_aponeurosis_line_hough_matlab_like,
+    line_segment_from_polyfit_1b,
+    zero_outside_vertical_cut,
+)
 from .kalman_fusion import FascicleKalman
 from .speckle import (
     SpeckleCoherenceParams,

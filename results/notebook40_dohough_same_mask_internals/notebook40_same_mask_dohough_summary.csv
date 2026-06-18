@@ -1,0 +1,10 @@
+frame,matlab_export_alpha,python_same_mask_alpha,package_dohough_alpha,current_slow_low_2_geofeatures_alpha,same_mask_alpha_diff_python_minus_matlab_export,current_matlab_minus_export_alpha,h_by_angle_mae,h_by_angle_max_abs,h_by_angle_exact_equal,h_by_angle_corr,hmat_shape_rows,hmat_shape_cols,helper_nhood_rows,helper_nhood_cols,matlab_doc_nhood_rows,matlab_doc_nhood_cols,matlab_top_alpha,python_top_alpha,matlab_top_weight,python_top_weight,same_position_peak_alpha_matches,same_position_peak_weight_matches
+0,18.5,18.5,18.5,18.5,0.0,0.0,0.0,0.0,True,1.0,1803,111,37,3,75,7,19.0,19.0,309.0,309.0,2,2
+122,15.0,15.0,15.0,32.0,0.0,17.0,0.0,0.0,True,0.9999999999999998,1803,111,37,3,75,7,15.0,15.0,310.0,310.0,4,7
+533,19.5,19.5,19.5,19.5,0.0,0.0,0.0,0.0,True,1.0,1803,111,37,3,75,7,20.5,20.5,338.0,338.0,3,2
+691,16.5,16.5,16.5,34.0,0.0,17.5,0.0,0.0,True,1.0,1803,111,37,3,75,7,13.0,13.0,284.0,284.0,4,4
+955,14.5,14.5,14.5,32.0,0.0,17.5,0.0,0.0,True,1.0,1803,111,37,3,75,7,14.0,14.0,304.0,304.0,9,9
+1066,20.0,19.5,19.5,20.5,-0.5,0.5,0.0,0.0,True,1.0,1803,111,37,3,75,7,19.5,19.5,310.0,310.0,1,2
+1600,19.0,19.0,19.0,20.0,0.0,1.0,0.0,0.0,True,0.9999999999999998,1803,111,37,3,75,7,19.0,19.0,315.0,315.0,4,3
+2133,19.5,19.5,19.5,20.0,0.0,0.5,0.0,0.0,True,1.0,1803,111,37,3,75,7,20.5,20.5,334.0,334.0,3,2
+2665,19.5,19.5,19.5,20.5,0.0,1.0,0.0,0.0,True,0.9999999999999998,1803,111,37,3,75,7,21.0,21.0,341.0,341.0,3,3
