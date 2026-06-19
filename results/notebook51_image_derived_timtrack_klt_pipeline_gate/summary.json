@@ -1,0 +1,18 @@
+{
+  "notebook": "51_image_derived_timtrack_klt_pipeline_gate.ipynb",
+  "uses_saved_matlab_geofeatures_for_timtrack_or_klt_masks": false,
+  "compares_timtrack_to_saved_full_sequence_fdat_geofeatures": true,
+  "image_timtrack_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook51_image_derived_timtrack_klt_pipeline_gate/image_derived_timtrack_geofeatures_arrays.npz",
+  "klt_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook51_image_derived_timtrack_klt_pipeline_gate/python_geofeature_mask_one_step_klt_arrays.npz",
+  "gate_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook51_image_derived_timtrack_klt_pipeline_gate/image_timtrack_py_masks_matlab_klt_2state_final_arrays.npz",
+  "strict_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook51_image_derived_timtrack_klt_pipeline_gate/strict_image_timtrack_prior_2state_final_arrays.npz",
+  "parity_metrics_csv": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook51_image_derived_timtrack_klt_pipeline_gate/parity_metrics.csv",
+  "image_alpha_rmse_deg": 6.201488399133804,
+  "timtrack_gate_passes": false,
+  "klt_angle_rmse_deg": 0.297554009830674,
+  "klt_length_rmse_mm": 0.46602008333109085,
+  "gate_final_passes": false,
+  "strict_final_passes": false,
+  "main_gate_description": "image-derived TimTrack alpha + Python-geofeature KLT masks + MATLAB raw KLT prior + MATLAB aponeuroses",
+  "strict_variant_description": "image-derived TimTrack alpha + Python-geofeature KLT masks + Python TimTrack prior + Python aponeuroses"
+}

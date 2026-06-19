@@ -1,0 +1,13 @@
+comparison,n,bias,mae,rmse,corr,unit,target_rmse,passes,variant
+py_masks_matlab_klt_prior_angle_deg,2665,0.0015617675676368884,0.16613536841113394,0.297554009830674,0.9981093902456997,deg,1.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_length_mm,2665,0.001652925380656162,0.2851156172439818,0.46602008333109085,0.9988437262374149,mm,2.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_x_sup_px,2665,-0.009337776376710887,0.6426939699423455,1.222327084715948,0.9951170562150018,px,2.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_x_deep_px,2665,-0.024893528157768532,3.371175239998545,5.72592073009135,0.9986173412096301,px,2.0,False,py_masks_matlab_klt_prior
+py_masks_python_timtrack_prior_angle_deg,2665,-4.439225593376676,4.5707618647134565,5.9494660472008825,0.5904481791927624,deg,1.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_length_mm,2665,6.397048568085123,8.092681803464455,10.666441334409592,0.5440900400521392,mm,2.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_x_sup_px,2665,-30.230127610232834,34.13804121458688,53.61093825974998,0.41586108890914875,px,2.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_x_deep_px,2665,-115.28402312139816,119.31721436361333,146.97049262327343,0.5579763200462983,px,2.0,False,py_masks_python_timtrack_prior
+python_timtrack_segment_direct_angle_deg,2665,-4.4406955429942885,4.572733495348617,5.948495592769447,0.5909352508839923,deg,1.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_length_mm,2665,6.3979176752062115,8.088519985824142,10.65917568928327,0.5447460901517519,mm,2.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_x_sup_px,2665,-30.229199709936072,34.14263805293875,53.50928698539951,0.4160173969659581,px,2.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_x_deep_px,2665,-115.29619000078024,119.33230175863328,146.9266167532455,0.5599470897458667,px,2.0,False,python_timtrack_segment_direct

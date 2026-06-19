@@ -25,15 +25,28 @@ from .ultratimtrack_matlab_2state import (
     reconstruct_fascicle_from_state,
     run_matlab_2state_kalman,
 )
+from .ultratimtrack_aponeurosis import (
+    aponeurosis_state_from_lines,
+    lines_from_aponeurosis_state,
+    run_matlab_aponeurosis_state_video,
+)
 from .matlab_timtrack import (
     alpha_from_saved_peaks,
+    compact_timtrack_geofeature,
+    detect_timtrack_geofeature_from_image,
+    fascicle_segment_from_aponeuroses_and_alpha,
+    fascicle_segment_from_geofeature,
     extract_saved_peak_arrays,
+    filter_usimage_hough_matlab_like,
+    get_fascicle_mask_matlab_like,
+    run_timtrack_geofeatures_from_video,
     reconstruct_saved_geofeature_alpha,
 )
 from .ultratrack_klt import (
     UltraTrackKLTConfig,
     apply_affine_1b,
     estimate_affine_matlab_coords,
+    propagate_cumulative_affines,
     run_one_step_affine_video,
     run_one_step_affine_sequence,
     tracking_masks_from_geofeature,
@@ -48,5 +61,5 @@ from .final_output import (
 )
 from . import geometry
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "

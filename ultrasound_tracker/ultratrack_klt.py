@@ -234,6 +234,46 @@ def apply_affine_1b(segment_or_points_1b: np.ndarray, affine: np.ndarray) -> np.
     return transformed.reshape(original_shape).astype(np.float64)
 
 
+def propagate_cumulative_affines(
+    initial_segment_1b: np.ndarray,
+    affine_matrices: np.ndarray,
+    *,
+    fallback: str = "previous",
+) -> np.ndarray:
+    """
+    Propagate one fascicle seed through a sequence of one-based affine matrices.
+
+    This is the compounding/raw KLT path: frame ``i`` applies affine ``i`` to
+    the segment from frame ``i - 1``.  ``affine_matrices[0]`` is ignored so the
+    array can be passed directly from :func:`run_one_step_affine_video`.
+    """
+
+    affines = np.asarray(affine_matrices, dtype=np.float64)
+    if affines.ndim != 3 or affines.shape[1:] != (2, 3):
+        raise ValueError("affine_matrices must have shape (n_frames, 2, 3).")
+    if fallback not in {"previous", "nan", "raise"}:
+        raise ValueError("fallback must be 'previous', 'nan', or 'raise'.")
+
+    initial = np.asarray(initial_segment_1b, dtype=np.float64).reshape(4)
+    n = len(affines)
+    out = np.full((n, 4), np.nan, dtype=np.float64)
+    if n == 0:
+        return out
+    out[0] = initial
+
+    for frame in range(1, n):
+        affine = affines[frame]
+        can_apply = np.all(np.isfinite(affine)) and np.all(np.isfinite(out[frame - 1]))
+        if can_apply:
+            out[frame] = apply_affine_1b(out[frame - 1], affine)
+        elif fallback == "previous":
+            out[frame] = out[frame - 1]
+        elif fallback == "raise":
+            raise ValueError(f"Missing finite affine or prior segment at frame {frame}.")
+
+    return out
+
+
 def read_gray_frames(video_path: str | Path, *, limit: Optional[int] = None) -> list[np.ndarray]:
     """Read grayscale frames from a video file."""
 

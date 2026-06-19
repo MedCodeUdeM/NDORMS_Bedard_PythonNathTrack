@@ -1,0 +1,13 @@
+comparison,n,bias,mae,rmse,corr,unit,target_rmse,passes,variant
+py_masks_matlab_klt_prior_angle_deg,2665,0.0018084027648987812,0.011967440932037934,0.017998915205369514,0.9999931242972117,deg,1.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_length_mm,2665,-0.004304567118330669,0.020872641852489143,0.035372603619862324,0.9999934256950089,mm,2.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_x_sup_px,2665,-0.01911998278501295,0.11559159981169483,0.18663312416134448,0.9998864379535839,px,2.0,True,py_masks_matlab_klt_prior
+py_masks_matlab_klt_prior_x_deep_px,2665,0.03256728636655461,0.14401729601474614,0.2467376079047118,0.9999974727185995,px,2.0,True,py_masks_matlab_klt_prior
+py_masks_python_timtrack_prior_angle_deg,2665,0.3471449779065643,1.7171963406162032,2.516997511610346,0.8862994498353147,deg,1.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_length_mm,2665,-3.3934998331948014,4.793733660172722,5.87323281701004,0.8921463766321551,mm,2.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_x_sup_px,2665,-90.20123764390867,91.97296348240964,106.20191023453968,0.7646955226949329,px,2.0,False,py_masks_python_timtrack_prior
+py_masks_python_timtrack_prior_x_deep_px,2665,-55.29284239391968,62.84502306318123,80.57579649262989,0.8929039667953176,px,2.0,False,py_masks_python_timtrack_prior
+python_timtrack_segment_direct_angle_deg,2665,0.3439198416211058,1.7169220592041068,2.5153917090551685,0.8863249026387441,deg,1.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_length_mm,2665,-3.3890339483246286,4.7909048044035,5.871554997797214,0.8920937753244595,mm,2.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_x_sup_px,2665,-90.18809657813551,91.96000178077412,106.18896647236059,0.7647733262579081,px,2.0,False,python_timtrack_segment_direct
+python_timtrack_segment_direct_x_deep_px,2665,-55.33729325351515,62.877423425192276,80.6011263532754,0.8931066691489595,px,2.0,False,python_timtrack_segment_direct

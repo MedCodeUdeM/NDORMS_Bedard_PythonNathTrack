@@ -1,0 +1,5 @@
+variant,description,FL_rmse_mm,PEN_rmse_deg,ANG_rmse_deg,passes_final_gate
+direct_timtrack_apo_matlab_klt_prior,Python direct TimTrack aponeuroses + Python mask KLT handoff with MATLAB raw KLT prior,1.1521341000237395,0.47778810642902336,0.5094966221206034,True
+apo_klt_prior_matlab_klt_prior,Python aponeurosis KLT prediction only + Python mask KLT handoff with MATLAB raw KLT prior,1.1462187913155675,0.47716581327917723,0.5094966221206031,True
+apo_state_matlab_klt_prior,Python aponeurosis KLT+Kalman state + Python mask KLT handoff with MATLAB raw KLT prior,1.1460699700031456,0.4751401833202844,0.5094966221206032,True
+strict_apo_state_python_klt_prior,Python aponeurosis KLT+Kalman state + Python TimTrack fascicle prior,3.953293867570365,2.0571061224840737,2.0676036176142056,False

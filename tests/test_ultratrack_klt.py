@@ -4,6 +4,7 @@ from ultrasound_tracker.ultratrack_klt import (
     apply_affine_1b,
     estimate_affine_matlab_coords,
     filter_points_by_mask,
+    propagate_cumulative_affines,
     tracking_masks_from_geofeature,
 )
 
@@ -62,3 +63,30 @@ def test_apply_affine_1b_accepts_point_matrix():
 
     np.testing.assert_allclose(transformed, [[6.0, 8.0], [8.0, 10.0]])
     assert transformed.shape == points.shape
+
+
+def test_propagate_cumulative_affines_compounds_frame_to_frame():
+    initial = np.array([10.0, 20.0, 30.0, 40.0])
+    affines = np.asarray(
+        [
+            [[np.nan, np.nan, np.nan], [np.nan, np.nan, np.nan]],
+            [[1.0, 0.0, 2.0], [0.0, 1.0, -1.0]],
+            [[1.0, 0.0, 2.0], [0.0, 1.0, -1.0]],
+        ],
+        dtype=np.float32,
+    )
+
+    propagated = propagate_cumulative_affines(initial, affines)
+
+    np.testing.assert_allclose(propagated[0], initial)
+    np.testing.assert_allclose(propagated[1], [12.0, 19.0, 32.0, 39.0])
+    np.testing.assert_allclose(propagated[2], [14.0, 18.0, 34.0, 38.0])
+
+
+def test_propagate_cumulative_affines_can_hold_previous_on_missing_affine():
+    initial = np.array([10.0, 20.0, 30.0, 40.0])
+    affines = np.full((3, 2, 3), np.nan, dtype=np.float32)
+
+    propagated = propagate_cumulative_affines(initial, affines)
+
+    np.testing.assert_allclose(propagated, np.vstack([initial, initial, initial]))
