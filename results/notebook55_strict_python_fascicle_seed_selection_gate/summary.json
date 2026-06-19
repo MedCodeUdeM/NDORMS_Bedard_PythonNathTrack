@@ -1,0 +1,21 @@
+{
+  "notebook": "55_strict_python_fascicle_seed_selection_gate.ipynb",
+  "source_video": "/Users/grosbedou/PycharmProjects/NDORMS/data/raw/UltraTimTrack_test.mp4",
+  "seed_selection_frames": 11,
+  "seed_selection_uses_matlab_targets": false,
+  "selected_alpha_deg": 17.5,
+  "selected_seed_segment": [
+    754.4759874269765,
+    55.93546571284381,
+    -48.475990060381314,
+    309.10525174259254
+  ],
+  "selected_cluster_id": "a17.50_x350_l75",
+  "autonomous_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook55_strict_python_fascicle_seed_selection_gate/strict_python_autonomous_seed_2state_final_arrays.npz",
+  "parity_metrics_csv": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook55_strict_python_fascicle_seed_selection_gate/parity_metrics.csv",
+  "final_pass": true,
+  "FL_RMSE_mm": 1.7551973229680593,
+  "PEN_RMSE_deg": 0.8853617878534307,
+  "ANG_RMSE_deg": 0.8936726954351027,
+  "diagnosis": "pass"
+}

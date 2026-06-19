@@ -103,13 +103,22 @@ Figure produite: Notebooks 30 to 54
 
 Question pour superviseur: N/A 
 
-Date: 19 june 
+**Date: 19 june 2026**
 
 Objectif du jour: Avoir un plan de match en termes d'étapes concrètes.
 Si je suis chanceux, finir la parité entre les deux codes.
 
-Ce qui fonctionne: 
-Ce qui ne fonctionne pas:
+Ce qui fonctionne: Masks,hough,kalman,aponeuroses marche!!!
+
+
+Ce qui ne fonctionne pas:La parité finale FL/PEN/ANG passe dans 
+certaines conditions, mais le pipeline strict 100 % indépendant n’est pas encore complètement fermé.
+Ce qui reste à confirmer est si je donne seulement la vidéo brute, 
+les ROI et les paramètres Python, est-ce que Python peut choisir le bon fascicule au départ, puis reproduire FL/PEN/ANG comme MATLAB?
+
+
+
+
 Différence Python vs MATLAB:
 Prochaine étape:
 Figure produite:

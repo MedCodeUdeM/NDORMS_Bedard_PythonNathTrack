@@ -61,5 +61,5 @@ from .final_output import (
 )
 from . import geometry
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 __author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "

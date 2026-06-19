@@ -1,0 +1,21 @@
+{
+  "selected_alpha_deg": 17.5,
+  "selected_seed_segment": [
+    754.4759874269765,
+    55.93546571284381,
+    -48.475990060381314,
+    309.10525174259254
+  ],
+  "selected_cluster_id": "a17.50_x350_l75",
+  "final_pass": true,
+  "FL_RMSE_mm": 1.7551973229680593,
+  "PEN_RMSE_deg": 0.8853617878534307,
+  "ANG_RMSE_deg": 0.8936726954351027,
+  "prior_angle_RMSE_vs_python_alpha_deg": 3.5830608782033395,
+  "kalman_angle_RMSE_vs_prior_deg": 2.526851446364273,
+  "timtrack_alpha_RMSE_vs_MATLAB_deg_debug": 2.2402130364229342,
+  "selected_cluster_score_gap": 0.001372508301406672,
+  "likely_reason": "pass",
+  "conclusion": "Strict Python autonomous parity is demonstrated on this video: Python selects the initial fascicle prior without MATLAB target information and reproduces final FL/PEN/ANG within tolerance.",
+  "matlab_used_for_seed_selection": false
+}
