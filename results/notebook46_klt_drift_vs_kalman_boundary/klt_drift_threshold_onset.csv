@@ -1,0 +1,7 @@
+condition,first_frame,n_frames,fraction_frames
+seq_abs_angle_gt_1deg,43,2346,0.8799699924981246
+seq_abs_length_gt_2mm,42,1914,0.7179294823705926
+seq_endpoint_gt_10px,41,2549,0.9561140285071268
+one_step_abs_angle_gt_1deg,102,54,0.020255063765941484
+one_step_abs_length_gt_2mm,157,17,0.006376594148537134
+one_step_endpoint_gt_10px,102,184,0.0690172543135784

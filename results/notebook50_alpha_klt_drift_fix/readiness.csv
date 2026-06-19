@@ -1,0 +1,5 @@
+gate,status,ready_for_next
+saved full-sequence TimTrack alpha,passes exactly from saved peak stream,True
+independent raw Python alpha,not the saved MATLAB full-sequence alpha stream,False
+non-compounding KLT handoff,angle and length pass,True
+corrected alpha + KLT + 2-state Kalman,final FL/PEN/ANG pass,True

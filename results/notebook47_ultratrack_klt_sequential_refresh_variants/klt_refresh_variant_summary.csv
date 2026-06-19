@@ -1,0 +1,5 @@
+variant,point_policy,geometry_policy,angle_rmse_deg,length_rmse_px,length_rmse_mm,x_sup_rmse_px,x_deep_rmse_px,passes_angle_length,passes_all_endpoint_strict
+persistent_cumulative,persistent,cumulative_python_geometry,6.11932925350646,121.03839111234336,10.919299696433825,15.812635055886657,127.00339241071234,False,False
+persistent_one_step,persistent,one_step_matlab_previous_geometry,0.3051483694158685,5.240468800909608,0.4727611533916675,1.2205761114631388,5.802571479921983,True,False
+redetect_cumulative,redetect_every_step,cumulative_python_geometry,6.067665384511656,130.41050237454397,11.764790872578969,15.006496539678993,136.33091251883954,False,False
+redetect_one_step,redetect_every_step,one_step_matlab_previous_geometry,0.3013109932225762,5.167993935651766,0.46622294045826423,1.2426148881098393,5.725075081297557,True,False

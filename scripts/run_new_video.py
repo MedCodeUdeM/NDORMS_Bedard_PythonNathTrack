@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-Run the current Python UltraTimTrack-style sequence path on a new video.
+Interactive runner for the current Python UltraTimTrack-style sequence path.
 
-This script is the command-line version of the current Notebook 23 workflow:
+Default interactive usage from the NDORMS project root:
 
-1. Load a video.
-2. Select or reuse superficial, deep, and fascicle ROIs.
-3. Detect aponeuroses and a fascicle mask frame by frame.
-4. Estimate fascicle alpha with MATLAB-style dohough + weighted median.
-5. Compute final FL/PEN/ANG with final_outputs_from_lines().
+    python3 scripts/run_new_video.py
 
-The selected OpenCV line segment is saved as debug/visualization only. The
-final fascicle length is the formula output: thickness / sin(pennation).
+The script will ask:
+1. Which video from data/raw/ should be analyzed.
+2. Whether to select new ROIs.
+3. Whether to save an annotated video, 3 overlay images, both, or neither.
+
+You can still use command-line mode:
+
+    python3 scripts/run_new_video.py data/raw/Trial_7D2.AVI --name Trial_7D2
 """
 
 from __future__ import annotations
@@ -27,8 +29,12 @@ import cv2
 import numpy as np
 
 
+# =============================================================================
+# Project root and imports
+# =============================================================================
+
 def find_project_root() -> Path:
-    """Find the repository root from either cwd or this script location."""
+    """Find repository root from cwd or this script location."""
     candidates = [Path.cwd().resolve(), *Path(__file__).resolve().parents]
     for candidate in candidates:
         if (candidate / "ultrasound_tracker").exists():
@@ -37,6 +43,7 @@ def find_project_root() -> Path:
 
 
 PROJECT_ROOT = find_project_root()
+
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -51,88 +58,338 @@ from ultrasound_tracker.frangi_detector import FrangiDetector
 from ultrasound_tracker.timtrack_hough import DoHoughParams, dohough
 
 
+VIDEO_EXTENSIONS = [".avi", ".AVI", ".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV"]
+
+
+# =============================================================================
+# Interactive helpers
+# =============================================================================
+
+def prompt_yes_no(question: str, default: bool = True) -> bool:
+    if default:
+        suffix = " [Y/n]: "
+    else:
+        suffix = " [y/N]: "
+
+    while True:
+        answer = input(question + suffix).strip().lower()
+
+        if answer == "":
+            return default
+
+        if answer in ["y", "yes", "o", "oui"]:
+            return True
+
+        if answer in ["n", "no", "non"]:
+            return False
+
+        print("Please answer yes/no.")
+
+
+def prompt_choice(question: str, valid_choices: List[str], default: str) -> str:
+    valid = set(valid_choices)
+
+    while True:
+        answer = input(f"{question} [{default}]: ").strip()
+
+        if answer == "":
+            answer = default
+
+        if answer in valid:
+            return answer
+
+        print(f"Invalid choice. Valid choices are: {', '.join(valid_choices)}")
+
+
+def list_videos_in_raw(raw_dir: Path) -> List[Path]:
+    videos: List[Path] = []
+
+    if not raw_dir.exists():
+        return videos
+
+    for ext in VIDEO_EXTENSIONS:
+        videos.extend(raw_dir.glob(f"*{ext}"))
+
+    videos = sorted(set(videos), key=lambda p: p.name.lower())
+
+    return videos
+
+
+def prompt_video_from_raw(raw_dir: Path) -> Path:
+    videos = list_videos_in_raw(raw_dir)
+
+    if len(videos) == 0:
+        raise FileNotFoundError(
+            f"No video found in {raw_dir}. "
+            f"Supported extensions: {VIDEO_EXTENSIONS}"
+        )
+
+    print("\nVideos found in data/raw:")
+    for i, path in enumerate(videos, start=1):
+        print(f"  {i}. {path.name}")
+
+    print("\nEnter the number or the exact filename.")
+    print("Example: 1")
+    print("Example: Trial_7D2.AVI")
+
+    while True:
+        answer = input("\nVideo to analyze: ").strip()
+
+        if answer == "":
+            print("Please enter a video number or filename.")
+            continue
+
+        if answer.isdigit():
+            idx = int(answer)
+            if 1 <= idx <= len(videos):
+                return videos[idx - 1]
+            print("Invalid number.")
+            continue
+
+        candidate = raw_dir / answer
+        if candidate.exists():
+            return candidate
+
+        matches = [p for p in videos if p.name.lower() == answer.lower()]
+        if len(matches) == 1:
+            return matches[0]
+
+        stem_matches = [p for p in videos if p.stem.lower() == answer.lower()]
+        if len(stem_matches) == 1:
+            return stem_matches[0]
+
+        print(f"Could not find video: {answer}")
+
+
+def configure_interactive_args(args: argparse.Namespace) -> argparse.Namespace:
+    """
+    Fill missing args interactively.
+
+    This is used when no video is given or when --interactive is used.
+    """
+
+    print("\n==============================")
+    print("Interactive UltraTimTrack run")
+    print("==============================")
+
+    raw_dir = PROJECT_ROOT / "data" / "raw"
+
+    if args.video is None:
+        args.video = prompt_video_from_raw(raw_dir)
+    else:
+        args.video = args.video.expanduser()
+
+    if not args.video.is_absolute():
+        args.video = (PROJECT_ROOT / args.video).resolve()
+    else:
+        args.video = args.video.resolve()
+
+    if args.name is None:
+        args.name = args.video.stem
+
+    print(f"\nSelected video: {args.video}")
+    print(f"Output name: {args.name}")
+
+    default_roi_path = PROJECT_ROOT / "data" / "rois" / f"{args.name}_rois.json"
+
+    if args.roi_path is None:
+        args.roi_path = default_roi_path
+
+    args.roi_path = args.roi_path.expanduser().resolve()
+
+    print(f"\nROI file: {args.roi_path}")
+
+    if args.roi_path.exists():
+        print("An ROI file already exists for this video.")
+        choose_new_roi = prompt_yes_no("Do you want to select new ROIs?", default=True)
+
+        if choose_new_roi:
+            args.select_roi = True
+            args.overwrite_roi = True
+        else:
+            args.select_roi = False
+            args.overwrite_roi = False
+    else:
+        print("No ROI file found. You will select ROIs now.")
+        args.select_roi = True
+        args.overwrite_roi = True
+
+    print("\nWhat output do you want?")
+    print("  1. Annotated video only")
+    print("  2. Three overlay images only")
+    print("  3. Annotated video + three overlay images")
+    print("  4. No overlay output, CSV/NPZ only")
+
+    output_choice = prompt_choice(
+        "Choose output mode",
+        valid_choices=["1", "2", "3", "4"],
+        default="1",
+    )
+
+    if output_choice == "1":
+        args.save_overlays = 0
+        args.save_overlay_video = args.results_dir / f"{args.name}_overlay_video.mp4"
+
+    elif output_choice == "2":
+        args.save_overlays = 3
+        args.save_overlay_video = None
+
+    elif output_choice == "3":
+        args.save_overlays = 3
+        args.save_overlay_video = args.results_dir / f"{args.name}_overlay_video.mp4"
+
+    elif output_choice == "4":
+        args.save_overlays = 0
+        args.save_overlay_video = None
+
+    print("\nConfiguration:")
+    print(f"  video: {args.video}")
+    print(f"  name: {args.name}")
+    print(f"  roi_path: {args.roi_path}")
+    print(f"  select_roi: {args.select_roi}")
+    print(f"  overwrite_roi: {args.overwrite_roi}")
+    print(f"  save_overlays: {args.save_overlays}")
+    print(f"  save_overlay_video: {args.save_overlay_video}")
+    print("")
+
+    return args
+
+
+# =============================================================================
+# Argument parser
+# =============================================================================
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the current Python UltraTimTrack-style final-output path on a video.",
     )
+
     parser.add_argument(
         "video",
+        nargs="?",
         type=Path,
-        help="Path to the ultrasound video, for example data/raw/my_video.mp4.",
+        default=None,
+        help=(
+            "Path to the ultrasound video. "
+            "If omitted, the script asks you to choose a video from data/raw."
+        ),
     )
+
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Ask for video, ROI, and output choices interactively.",
+    )
+
     parser.add_argument(
         "--name",
         default=None,
         help="Output name prefix. Defaults to the video filename stem.",
     )
+
     parser.add_argument(
         "--roi-path",
         type=Path,
         default=None,
         help="ROI JSON path. Defaults to data/rois/<name>_rois.json.",
     )
+
     parser.add_argument(
         "--select-roi",
         action="store_true",
         help="Open the OpenCV ROI selector even if the ROI JSON already exists.",
     )
+
     parser.add_argument(
         "--overwrite-roi",
         action="store_true",
         help="Allow replacing an existing ROI JSON when selecting ROIs.",
     )
+
     parser.add_argument("--frame-start", type=int, default=0)
     parser.add_argument("--frame-end", type=int, default=None)
     parser.add_argument("--frame-step", type=int, default=1)
+
     parser.add_argument(
         "--results-dir",
         type=Path,
         default=PROJECT_ROOT / "results",
         help="Directory for CSV, NPZ, and overlay outputs.",
     )
+
     parser.add_argument(
         "--x-eval",
         type=float,
         default=20.0,
         help="X coordinate used for MATLAB-style aponeurosis thickness.",
     )
+
     parser.add_argument(
         "--thetares",
         type=float,
         default=1.0,
         help="dohough theta resolution in degrees.",
     )
+
     parser.add_argument("--alpha-min", type=float, default=8.0)
     parser.add_argument("--alpha-max", type=float, default=80.0)
+
     parser.add_argument(
         "--image-depth-mm",
         type=float,
         default=None,
         help="Optional image depth in mm. Used to derive mm_per_pixel from frame height.",
     )
+
     parser.add_argument(
         "--mm-per-pixel",
         type=float,
         default=None,
         help="Optional direct pixel scale. Overrides --image-depth-mm.",
     )
+
     parser.add_argument(
         "--save-overlays",
         type=int,
         default=3,
         help="Number of successful frames to save as overlay PNGs. Use 0 to disable.",
     )
+
+    parser.add_argument(
+        "--save-overlay-video",
+        type=Path,
+        default=None,
+        help="Optional path to save one annotated overlay video directly.",
+    )
+
     parser.add_argument(
         "--progress-every",
         type=int,
         default=100,
         help="Print progress every N processed frames.",
     )
-    return parser.parse_args()
 
+    args = parser.parse_args()
+
+    args.results_dir = args.results_dir.expanduser()
+    if not args.results_dir.is_absolute():
+        args.results_dir = (PROJECT_ROOT / args.results_dir).resolve()
+    else:
+        args.results_dir = args.results_dir.resolve()
+
+    if args.video is None or args.interactive:
+        args = configure_interactive_args(args)
+
+    return args
+
+
+# =============================================================================
+# Video reading and ROI
+# =============================================================================
 
 def read_first_frame(video_path: Path) -> Tuple[np.ndarray, float, int]:
     cap = cv2.VideoCapture(str(video_path))
+
     if not cap.isOpened():
         raise FileNotFoundError(f"Could not open video: {video_path}")
 
@@ -167,12 +424,23 @@ def select_or_load_rois(
             "Use --overwrite-roi if you want to replace it."
         )
 
-    print("Select ROIs in this order: superficial, deep, fascicle.")
+    print("\nSelect ROIs in this order:")
+    print("  1. superficial")
+    print("  2. deep")
+    print("  3. fascicle")
     selected = roi.select_all_rois_cv2(frame0_gray, include_fascicle_roi=True)
+
+    roi_path.parent.mkdir(parents=True, exist_ok=True)
     roi.save_rois(selected, roi_path)
+
     print(f"Saved ROIs: {roi_path}")
+
     return selected
 
+
+# =============================================================================
+# Detectors
+# =============================================================================
 
 def make_aponeurosis_detector() -> AponeurosisDetector:
     return AponeurosisDetector(
@@ -228,6 +496,7 @@ def frangi_mask_and_lines(
         minLineLength=detector.min_line_length,
         maxLineGap=detector.max_line_gap,
     )
+
     if raw_lines is None:
         return binary_bool, None, None, None
 
@@ -235,41 +504,129 @@ def frangi_mask_and_lines(
     signed_angles = geom.line_angles_batch(lines, degrees=True)
     abs_angles = np.abs(signed_angles)
     lengths = geom.line_lengths_batch(lines)
+
     keep = (abs_angles >= detector.angle_min) & (abs_angles <= detector.angle_max)
 
     filtered_lines = lines[keep]
     filtered_angles = abs_angles[keep]
     filtered_lengths = lengths[keep]
+
     if len(filtered_lines) == 0:
         return binary_bool, None, None, None
 
     return binary_bool, filtered_lines, filtered_angles, filtered_lengths
 
 
+# =============================================================================
+# Utilities
+# =============================================================================
+
 def frame_indices(n_frames: int, start: int, end: Optional[int], step: int) -> List[int]:
     if step <= 0:
         raise ValueError("--frame-step must be positive.")
+
     if start < 0:
         raise ValueError("--frame-start must be >= 0.")
+
     effective_end = n_frames if end is None else min(int(end), n_frames)
     indices = list(range(int(start), effective_end, int(step)))
+
     if not indices:
         raise ValueError("No frames selected. Check frame start/end/step.")
+
     return indices
-
-
-def finite_line(line: np.ndarray) -> bool:
-    return bool(np.all(np.isfinite(line)))
 
 
 def write_csv(path: Path, results: Dict[str, List[Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
     fieldnames = list(results.keys())
+
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+
         for row_idx in range(len(results[fieldnames[0]])):
             writer.writerow({key: results[key][row_idx] for key in fieldnames})
+
+
+# =============================================================================
+# Overlay image and video
+# =============================================================================
+
+def draw_overlay_frame(
+    frame: np.ndarray,
+    rois: Dict[str, roi.ROI],
+    arrays: Dict[str, np.ndarray],
+    result_idx: int,
+) -> np.ndarray:
+    if frame.ndim == 3:
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    else:
+        frame_gray = frame.copy()
+
+    vis = roi.draw_rois(frame_gray, rois)
+
+    if np.all(np.isfinite(arrays["sup_apo_lines"][result_idx])):
+        ut.draw_line_on_image(
+            vis,
+            arrays["sup_apo_lines"][result_idx],
+            color=(255, 0, 0),
+            thickness=3,
+        )
+
+    if np.all(np.isfinite(arrays["deep_apo_lines"][result_idx])):
+        ut.draw_line_on_image(
+            vis,
+            arrays["deep_apo_lines"][result_idx],
+            color=(0, 255, 0),
+            thickness=3,
+        )
+
+    if np.all(np.isfinite(arrays["fascicle_lines"][result_idx])):
+        ut.draw_line_on_image(
+            vis,
+            arrays["fascicle_lines"][result_idx],
+            color=(0, 255, 255),
+            thickness=2,
+        )
+
+    if np.all(np.isfinite(arrays["fascicle_segments"][result_idx])):
+        ut.draw_line_on_image(
+            vis,
+            arrays["fascicle_segments"][result_idx],
+            color=(0, 0, 255),
+            thickness=3,
+        )
+
+    frame_idx = int(arrays["frame"][result_idx])
+
+    fl_text = f"{arrays['FL_px'][result_idx]:.1f} px"
+
+    if "FL_mm" in arrays and np.isfinite(arrays["FL_mm"][result_idx]):
+        fl_text += f" / {arrays['FL_mm'][result_idx]:.2f} mm"
+
+    text_lines = [
+        f"Frame: {frame_idx}",
+        f"ANG: {arrays['ANG_deg'][result_idx]:.2f} deg",
+        f"PEN: {arrays['PEN_deg'][result_idx]:.2f} deg",
+        f"FL: {fl_text}",
+    ]
+
+    ut.put_text_lines_on_image(
+        vis,
+        text_lines,
+        origin=(30, 35),
+        line_spacing=24,
+        font_scale=0.65,
+        color=(255, 255, 255),
+        outline_color=(0, 0, 0),
+    )
+
+    if vis.ndim == 2:
+        vis = cv2.cvtColor(vis, cv2.COLOR_GRAY2BGR)
+
+    return vis
 
 
 def save_overlay(
@@ -284,51 +641,106 @@ def save_overlay(
     cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
     ret, frame = cap.read()
     cap.release()
+
     if not ret:
+        print(f"Could not read frame {frame_idx} for overlay image.")
         return
 
-    if frame.ndim == 3:
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    else:
-        frame_gray = frame.copy()
+    vis = draw_overlay_frame(frame, rois, arrays, result_idx)
 
-    vis = roi.draw_rois(frame_gray, rois)
-    ut.draw_line_on_image(vis, arrays["sup_apo_lines"][result_idx], color=(255, 0, 0), thickness=3)
-    ut.draw_line_on_image(vis, arrays["deep_apo_lines"][result_idx], color=(0, 255, 0), thickness=3)
-    ut.draw_line_on_image(vis, arrays["fascicle_lines"][result_idx], color=(0, 255, 255), thickness=2)
-    ut.draw_line_on_image(vis, arrays["fascicle_segments"][result_idx], color=(0, 0, 255), thickness=3)
-
-    text_lines = [
-        f"Frame: {frame_idx}",
-        f"ANG: {arrays['ANG_deg'][result_idx]:.2f} deg",
-        f"PEN: {arrays['PEN_deg'][result_idx]:.2f} deg",
-        f"FL: {arrays['FL_px'][result_idx]:.1f} px",
-    ]
-    if "FL_mm" in arrays:
-        text_lines[-1] += f" / {arrays['FL_mm'][result_idx]:.2f} mm"
-
-    ut.put_text_lines_on_image(
-        vis,
-        text_lines,
-        origin=(30, 35),
-        line_spacing=24,
-        font_scale=0.65,
-        color=(255, 255, 255),
-        outline_color=(0, 0, 0),
-    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(output_path), vis)
 
 
-def process_video(args: argparse.Namespace) -> Dict[str, Path]:
+def save_overlay_video(
+    video_path: Path,
+    output_video_path: Path,
+    rois: Dict[str, roi.ROI],
+    arrays: Dict[str, np.ndarray],
+    fps: float,
+) -> None:
+    output_video_path = Path(output_video_path)
+    output_video_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cap = cv2.VideoCapture(str(video_path))
+
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video for overlay export: {video_path}")
+
+    frame_indices_array = arrays["frame"].astype(int)
+
+    if len(frame_indices_array) == 0:
+        cap.release()
+        raise RuntimeError("No processed frames available for overlay video.")
+
+    first_frame_idx = int(frame_indices_array[0])
+    cap.set(cv2.CAP_PROP_POS_FRAMES, first_frame_idx)
+    ret, first_frame = cap.read()
+
+    if not ret:
+        cap.release()
+        raise RuntimeError(f"Could not read first frame for overlay video: {first_frame_idx}")
+
+    height, width = first_frame.shape[:2]
+    output_fps = fps if fps and fps > 0 else 30.0
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(
+        str(output_video_path),
+        fourcc,
+        output_fps,
+        (width, height),
+    )
+
+    if not writer.isOpened():
+        cap.release()
+        raise RuntimeError(f"Could not create overlay video: {output_video_path}")
+
+    print(f"\nWriting overlay video: {output_video_path}")
+    print(f"Frame size: {width} x {height}")
+    print(f"FPS: {output_fps:.3f}")
+    print(f"Frames to write: {len(frame_indices_array)}")
+
+    for result_idx, frame_idx in enumerate(frame_indices_array):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        ret, frame = cap.read()
+
+        if not ret:
+            print(f"Skipping frame {frame_idx}: could not read frame.")
+            continue
+
+        vis = draw_overlay_frame(frame, rois, arrays, result_idx)
+
+        if vis.shape[:2] != (height, width):
+            vis = cv2.resize(vis, (width, height))
+
+        writer.write(vis)
+
+        if result_idx % 100 == 0:
+            print(f"Wrote overlay frame {result_idx}/{len(frame_indices_array)}")
+
+    writer.release()
+    cap.release()
+
+    print(f"Saved overlay video to: {output_video_path}")
+
+
+# =============================================================================
+# Main processing
+# =============================================================================
+
+def process_video(args: argparse.Namespace) -> Dict[str, Optional[Path]]:
     video_path = args.video.expanduser().resolve()
     name = args.name or video_path.stem
+
     roi_path = args.roi_path or (PROJECT_ROOT / "data" / "rois" / f"{name}_rois.json")
     roi_path = roi_path.expanduser().resolve()
+
     results_dir = args.results_dir.expanduser().resolve()
     overlays_dir = results_dir / f"{name}_overlays"
 
     frame0_gray, fps, n_frames = read_first_frame(video_path)
+
     rois = select_or_load_rois(
         frame0_gray,
         roi_path,
@@ -341,6 +753,7 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
         raise KeyError(f"ROI file is missing required entries: {sorted(missing)}")
 
     mm_per_pixel = args.mm_per_pixel
+
     if mm_per_pixel is None and args.image_depth_mm is not None:
         mm_per_pixel = float(args.image_depth_mm) / float(frame0_gray.shape[0])
 
@@ -352,6 +765,7 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
 
     apo_detector = make_aponeurosis_detector()
     fas_detector = make_fascicle_detector()
+
     dohough_params = DoHoughParams(
         angle_range=(args.alpha_min, args.alpha_max),
         thetares=args.thetares,
@@ -395,14 +809,18 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
 
     cap = cv2.VideoCapture(str(video_path))
     processed = 0
+
     for frame_idx in range(n_frames):
         ret, frame = cap.read()
+
         if not ret:
             break
+
         if frame_idx not in target_frames:
             continue
 
         processed += 1
+
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame.copy()
         time_s = frame_idx / fps if fps and fps > 0 else np.nan
 
@@ -438,30 +856,49 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
             fas_img = roi.extract_roi(frame_gray, rois["fascicle"])
 
             sup_result = apo_detector.detect(sup_img, kind="superficial")
-            sup_line_tmp = roi.line_local_to_global(sup_result["line_local"], rois["superficial"])
+            sup_line_tmp = roi.line_local_to_global(
+                sup_result["line_local"],
+                rois["superficial"],
+            )
+
             if sup_line_tmp is None:
                 raise RuntimeError("No superficial aponeurosis detected.")
 
             deep_result = apo_detector.detect(deep_img, kind="deep")
-            deep_line_tmp = roi.line_local_to_global(deep_result["line_local"], rois["deep"])
+            deep_line_tmp = roi.line_local_to_global(
+                deep_result["line_local"],
+                rois["deep"],
+            )
+
             if deep_line_tmp is None:
                 raise RuntimeError("No deep aponeurosis detected.")
 
-            fas_binary, fas_lines_local, _, fas_lengths = frangi_mask_and_lines(fas_img, fas_detector)
+            fas_binary, fas_lines_local, _, fas_lengths = frangi_mask_and_lines(
+                fas_img,
+                fas_detector,
+            )
+
             hough_result = dohough(fas_binary, dohough_params)
             fascicle_angle_deg = float(hough_result["alpha"])
+
             if not np.isfinite(fascicle_angle_deg):
                 raise RuntimeError("No dohough fascicle alpha detected.")
 
             dohough_mask_density = float(np.mean(fas_binary))
             dohough_n_peaks = int(len(hough_result["alphas"]))
+
             if dohough_n_peaks:
                 n_fill = min(10, dohough_n_peaks)
                 peak_alphas[:n_fill] = hough_result["alphas"][:n_fill]
                 peak_weights[:n_fill] = hough_result["weights"][:n_fill]
 
-            fas_lines_global = roi.lines_local_to_global(fas_lines_local, rois["fascicle"])
+            fas_lines_global = roi.lines_local_to_global(
+                fas_lines_local,
+                rois["fascicle"],
+            )
+
             n_candidates = 0 if fas_lines_global is None else len(fas_lines_global)
+
             fas_best_tmp = geom.pick_best_fascicle_line(
                 fas_lines_global,
                 lengths=fas_lengths,
@@ -470,6 +907,7 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
                 frame_shape=frame_gray.shape,
                 margin=50,
             )
+
             if fas_best_tmp is None:
                 raise RuntimeError("No fascicle line selected for visualization/debug.")
 
@@ -478,6 +916,7 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
                 deep_apo_line=deep_line_tmp,
                 fascicle_line=fas_best_tmp,
             )
+
             final_output = final_outputs_from_lines(
                 fascicle_angle_deg,
                 sup_line_tmp,
@@ -488,21 +927,36 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
             )
 
             success = True
+
             sup_line_global = np.asarray(sup_line_tmp, dtype=np.float32)
             deep_line_global = np.asarray(deep_line_tmp, dtype=np.float32)
             fas_best_line_global = np.asarray(fas_best_tmp, dtype=np.float32)
-            fas_segment = np.asarray(geometry_features["fascicle_segment_between_apos"], dtype=np.float32)
-            sup_attachment = np.asarray(geometry_features["sup_attachment"], dtype=np.float32)
-            deep_attachment = np.asarray(geometry_features["deep_attachment"], dtype=np.float32)
+
+            fas_segment = np.asarray(
+                geometry_features["fascicle_segment_between_apos"],
+                dtype=np.float32,
+            )
+
+            sup_attachment = np.asarray(
+                geometry_features["sup_attachment"],
+                dtype=np.float32,
+            )
+
+            deep_attachment = np.asarray(
+                geometry_features["deep_attachment"],
+                dtype=np.float32,
+            )
 
             selected_line_angle_deg = float(geometry_features["fascicle_angle_deg"])
             selected_line_length_px = float(geometry_features["fascicle_length_px"])
+
             pennation_angle_deg = scalar0(final_output["PEN_deg"])
             fascicle_length_px = scalar0(final_output["FL_px"])
             final_fascicle_length_px = fascicle_length_px
             super_apo_angle_deg = scalar0(final_output["super_apo_angle_deg"])
             deep_apo_angle_deg = scalar0(final_output["deep_apo_angle_deg"])
             muscle_thickness_px = scalar0(final_output["muscle_thickness_px"])
+
             if "FL_mm" in final_output:
                 fascicle_length_mm = scalar0(final_output["FL_mm"])
 
@@ -574,25 +1028,61 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
         "dohough_peak_weights": np.vstack(dohough_peak_weights).astype(np.float32),
         "n_fascicle_candidates": np.asarray(results["n_fascicle_candidates"], dtype=np.int32),
     }
+
     if mm_per_pixel is not None:
         arrays["mm_per_pixel"] = np.asarray(float(mm_per_pixel), dtype=np.float32)
 
     write_csv(output_csv, results)
     np.savez(output_npz, **arrays)
 
+    overlay_video_path: Optional[Path] = None
+
+    if args.save_overlay_video is not None:
+        overlay_video_path = args.save_overlay_video.expanduser()
+        if not overlay_video_path.is_absolute():
+            overlay_video_path = (PROJECT_ROOT / overlay_video_path).resolve()
+        else:
+            overlay_video_path = overlay_video_path.resolve()
+
+        save_overlay_video(
+            video_path=video_path,
+            output_video_path=overlay_video_path,
+            rois=rois,
+            arrays=arrays,
+            fps=fps,
+        )
+
     overlay_paths: List[Path] = []
+
     if args.save_overlays > 0:
         valid_indices = np.where(arrays["success"])[0]
+
         if len(valid_indices):
-            positions = np.linspace(0, len(valid_indices) - 1, min(args.save_overlays, len(valid_indices)))
+            positions = np.linspace(
+                0,
+                len(valid_indices) - 1,
+                min(args.save_overlays, len(valid_indices)),
+            )
+
             selected = [int(valid_indices[int(round(pos))]) for pos in positions]
+
             for result_idx in selected:
                 frame_idx = int(arrays["frame"][result_idx])
                 output_path = overlays_dir / f"{name}_frame_{frame_idx:06d}.png"
-                save_overlay(video_path, output_path, rois, frame_idx, result_idx, arrays)
+
+                save_overlay(
+                    video_path,
+                    output_path,
+                    rois,
+                    frame_idx,
+                    result_idx,
+                    arrays,
+                )
+
                 overlay_paths.append(output_path)
 
     success_count = int(np.sum(arrays["success"]))
+
     print("\nDone.")
     print(f"Video: {video_path}")
     print(f"Frames processed: {len(indices)}")
@@ -600,15 +1090,23 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
     print(f"CSV: {output_csv}")
     print(f"NPZ: {output_npz}")
     print(f"ROI: {roi_path}")
+
+    if overlay_video_path is not None:
+        print(f"Overlay video: {overlay_video_path}")
+
     for path in overlay_paths:
-        print(f"Overlay: {path}")
+        print(f"Overlay image: {path}")
 
     errors = [err for err in results["error"] if err]
+
     if errors:
         counts: Dict[str, int] = {}
+
         for err in errors:
             counts[err] = counts.get(err, 0) + 1
+
         print("\nTop errors:")
+
         for err, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:5]:
             print(f"{count}x - {err}")
 
@@ -617,6 +1115,7 @@ def process_video(args: argparse.Namespace) -> Dict[str, Path]:
         "npz": output_npz,
         "roi": roi_path,
         "overlays_dir": overlays_dir,
+        "overlay_video": overlay_video_path,
     }
 
 

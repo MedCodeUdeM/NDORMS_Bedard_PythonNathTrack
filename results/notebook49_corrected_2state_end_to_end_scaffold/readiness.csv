@@ -1,0 +1,7 @@
+gate,status,ready_for_next
+MATLAB 2-state Kalman port,passes oracle and corrected-handoff final gates,True
+Corrected downstream handoff,"passes final FL/PEN/ANG targets, but uses MATLAB alpha and aponeuroses",True
+Current Python end-to-end scaffold,not ready; sequential KLT plus full Python alpha fails final gate,False
+KLT correction alone,not enough while full Python alpha remains off,False
+Alpha correction alone,not enough while sequential KLT drift remains,False
+Shared parity script on corrected handoff,final rows pass,True

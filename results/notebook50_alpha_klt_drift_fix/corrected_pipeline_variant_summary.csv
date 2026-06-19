@@ -1,0 +1,5 @@
+variant,description,FL_rmse_mm,PEN_rmse_deg,ANG_rmse_deg,passes_final_gate
+baseline_cumulative_klt_raw_alpha,cumulative sequential KLT + raw Python TimTrack alpha,11.208491029219624,5.429017109199198,5.429017109199199,False
+alpha_fixed_only,cumulative sequential KLT + corrected saved alpha,6.868819502554928,3.292757937521781,3.2927579375217806,False
+klt_fixed_only,one-step KLT handoff + raw Python TimTrack alpha,10.327051272212927,4.29996127661407,4.29996127661407,False
+alpha_and_klt_fixed,one-step KLT handoff + corrected saved alpha,0.7529551324064312,0.409723832187515,0.40972383218751485,True

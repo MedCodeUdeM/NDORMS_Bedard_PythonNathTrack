@@ -1,0 +1,22 @@
+{
+  "notebook": "49_corrected_2state_end_to_end_scaffold.ipynb",
+  "module": "ultrasound_tracker.ultratimtrack_matlab_2state",
+  "current_end_to_end_scaffold_passes": false,
+  "klt_corrected_only_passes": false,
+  "alpha_corrected_only_passes": false,
+  "corrected_handoff_passes": true,
+  "oracle_matlab_inputs_passes": true,
+  "script_final_rows_pass": true,
+  "current_scaffold_FL_rmse_mm": 11.208491029219624,
+  "klt_corrected_only_FL_rmse_mm": 10.327051272212927,
+  "alpha_corrected_only_FL_rmse_mm": 6.868819502554928,
+  "corrected_handoff_FL_rmse_mm": 0.7529551324064312,
+  "corrected_handoff_PEN_rmse_deg": 0.409723832187515,
+  "corrected_handoff_ANG_rmse_deg": 0.40972383218751485,
+  "python_alpha_rmse_deg": 6.201488399133804,
+  "remaining_blockers": [
+    "full-sequence Python TimTrack alpha parity",
+    "sequential KLT propagation drift",
+    "aponeurosis state estimator port for complete Python final output"
+  ]
+}

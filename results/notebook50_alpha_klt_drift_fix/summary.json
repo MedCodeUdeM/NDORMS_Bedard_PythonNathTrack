@@ -1,0 +1,18 @@
+{
+  "notebook": "50_fix_alpha_klt_drift_pipeline_gate.ipynb",
+  "saved_alpha_reconstruction_passes": true,
+  "raw_python_alpha_passes_saved_full_sequence_target": false,
+  "one_step_klt_angle_passes": true,
+  "one_step_klt_length_passes": true,
+  "corrected_alpha_and_klt_final_gate_passes": true,
+  "raw_python_alpha_rmse_deg": 6.201488399133804,
+  "one_step_klt_angle_rmse_deg": 0.3013109932225762,
+  "one_step_klt_length_rmse_mm": 0.46622294045826423,
+  "corrected_FL_rmse_mm": 0.7529551324064312,
+  "corrected_PEN_rmse_deg": 0.409723832187515,
+  "corrected_ANG_rmse_deg": 0.40972383218751485,
+  "remaining_non_oracle_work": [
+    "reproduce MATLAB saved full-sequence peak stream from image masks without reading saved geofeatures",
+    "port aponeurosis state estimator for fully independent final output"
+  ]
+}

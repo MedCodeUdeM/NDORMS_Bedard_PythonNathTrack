@@ -1,0 +1,21 @@
+{
+  "gate": "UltraTrack/KLT oracle-mask prototype",
+  "passes_full_gate": false,
+  "passes_validation9_gate": false,
+  "contract_win_size_width_height": [
+    71,
+    21
+  ],
+  "full_frames": 2666,
+  "f_affine_rate": 1.0,
+  "a_affine_rate": 1.0,
+  "f_reinit_count": 0,
+  "a_reinit_count": 0,
+  "notebook43_angle_rmse_deg": 10.823259709648635,
+  "notebook44_angle_rmse_deg": 6.118181484715813,
+  "notebook43_length_rmse_px": 186.9411591466729,
+  "notebook44_length_rmse_px": 121.01568860982493,
+  "notebook43_length_rmse_mm": 16.864620584940067,
+  "notebook44_length_rmse_mm": 10.91725162369773,
+  "next_action": "Package the oracle-mask KLT prototype, then add feature-location and affine one-step checkpoints against MATLAB."
+}
