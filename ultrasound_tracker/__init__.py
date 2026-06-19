@@ -20,6 +20,18 @@ from .speckle import (
     robust_mad_sigma,
     speckle_pair_confidence,
 )
+from .speckle_confidence import (
+    ConfidenceMetrics,
+    SpeckleConfidenceConfig,
+    adapt_measurement_covariance,
+    combine_confidence_metrics,
+    compute_feature_detection_reliability,
+    compute_geometry_stability,
+    compute_motion_consistency,
+    compute_speckle_coherence,
+    confidence_to_r_scale,
+    zncc,
+)
 from .ultratimtrack_matlab_2state import (
     MatlabTwoStateKalmanConfig,
     reconstruct_fascicle_from_state,
@@ -51,6 +63,13 @@ from .ultratrack_klt import (
     run_one_step_affine_sequence,
     tracking_masks_from_geofeature,
 )
+from .strict_fascicle_seed import (
+    FascicleSeedScoringConfig,
+    cluster_seed_candidates,
+    extract_fascicle_seed_candidates,
+    score_fascicle_seed_candidate,
+    select_autonomous_fascicle_seed,
+)
 from .optical_flow_dense import DenseFlowTracker
 from .utils import plot_results, save_results
 from .final_output import (
@@ -61,5 +80,5 @@ from .final_output import (
 )
 from . import geometry
 
-__version__ = "1.3.0"
+__version__ = "2.0.0"
 __author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "

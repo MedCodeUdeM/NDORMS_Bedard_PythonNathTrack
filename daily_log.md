@@ -110,19 +110,17 @@ Si je suis chanceux, finir la parité entre les deux codes.
 
 Ce qui fonctionne: Masks,hough,kalman,aponeuroses marche!!!
 
-
 Ce qui ne fonctionne pas:La parité finale FL/PEN/ANG passe dans 
 certaines conditions, mais le pipeline strict 100 % indépendant n’est pas encore complètement fermé.
 Ce qui reste à confirmer est si je donne seulement la vidéo brute, 
 les ROI et les paramètres Python, est-ce que Python peut choisir le bon fascicule au départ, puis reproduire FL/PEN/ANG comme MATLAB?
 
+Prochaine étape: Maybe repasser notebook 50, on est dans les valeurs
+mais on perd la carte après 1 min.
 
-
-
-Différence Python vs MATLAB:
-Prochaine étape:
-Figure produite:
-Question pour superviseur:
+Extra : Notebooke 56 et 57 est un test rapide de speckle tracking
+pour voir si ça marche bien et pourrait être une bonne aide
+au filtre Kalman
 
 
 

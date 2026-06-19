@@ -1,0 +1,15 @@
+{
+  "seconds_analyzed": 29.963108485048437,
+  "n_frames": 1000,
+  "n_sample_points": 216,
+  "median_confidence": 0.8674571812152863,
+  "min_confidence": 0.3373449146747589,
+  "max_R_scale": 5.3911176210740255,
+  "median_epsilon_f": 0.0,
+  "p01_p99_epsilon_f_map": [
+    -0.019012588262557983,
+    0.018641077615320675
+  ],
+  "median_epsilon_f_sigma": 0.0008725309744477272,
+  "median_fit_residual_px": 0.25208166241645813
+}

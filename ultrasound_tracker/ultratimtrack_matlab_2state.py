@@ -36,6 +36,7 @@ class MatlabTwoStateKalmanConfig:
     alpha_measurement_variance: float = 3.05529211
     n_start_frames: int = 1
     run_smoother: bool = True
+    use_adaptive_R: bool = False
 
 
 def _as_segments(values: np.ndarray, name: str) -> np.ndarray:
@@ -50,6 +51,14 @@ def _as_1d(values: np.ndarray, name: str, n: int) -> np.ndarray:
     if len(arr) != n:
         raise ValueError(f"{name} must have length {n}, got {len(arr)}.")
     return arr
+
+
+def _as_optional_scale(values: Optional[np.ndarray], name: str, n: int) -> np.ndarray:
+    if values is None:
+        return np.ones(n, dtype=np.float64)
+    arr = _as_1d(values, name, n)
+    arr = np.where(np.isfinite(arr), arr, 1.0)
+    return np.clip(arr, np.finfo(float).eps, np.inf)
 
 
 def _line_coefficients(line: np.ndarray) -> Tuple[float, float]:
@@ -184,6 +193,7 @@ def run_matlab_2state_kalman(
     config: MatlabTwoStateKalmanConfig | None = None,
     fixed_superficial_y: Optional[float] = None,
     mm_per_pixel: Optional[float] = None,
+    measurement_r_scale: Optional[np.ndarray] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Run a MATLAB-like 2-state forward filter plus optional RTS-style smoother.
@@ -218,6 +228,13 @@ def run_matlab_2state_kalman(
     cfg = config or MatlabTwoStateKalmanConfig()
     n_start = max(1, min(int(cfg.n_start_frames), n))
     fixed_y = float(klt[0, 1] if fixed_superficial_y is None else fixed_superficial_y)
+    r_scale = _as_optional_scale(measurement_r_scale, "measurement_r_scale", n) if cfg.use_adaptive_R else np.ones(n)
+    measurement_R_diag = np.column_stack(
+        [
+            np.full(n, float(cfg.x_measurement_variance), dtype=np.float64) * r_scale,
+            np.full(n, float(cfg.alpha_measurement_variance), dtype=np.float64) * r_scale,
+        ]
+    )
 
     klt_alpha = _normalized_segment_angles(klt)
     states_plus = np.full((n, STATE_SIZE), np.nan, dtype=np.float64)
@@ -254,7 +271,7 @@ def run_matlab_2state_kalman(
             p_plus[frame - 1, IDX_X_SUP],
             q_x,
             klt[0, 0],
-            cfg.x_measurement_variance,
+            measurement_R_diag[frame, IDX_X_SUP],
         )
         states_minus[frame, IDX_X_SUP] = x_prior
 
@@ -272,7 +289,7 @@ def run_matlab_2state_kalman(
             p_plus[frame - 1, IDX_ALPHA],
             q_alpha,
             tim_alpha[frame],
-            cfg.alpha_measurement_variance,
+            measurement_R_diag[frame, IDX_ALPHA],
         )
         states_minus[frame, IDX_ALPHA] = alpha_prior
 
@@ -320,6 +337,9 @@ def run_matlab_2state_kalman(
         "fas_p_minus": p_minus,
         "kalman_gain": gains,
         "smoother_gain": smoother_gain,
+        "measurement_r_scale": r_scale,
+        "measurement_R_diag": measurement_R_diag,
+        "use_adaptive_R": np.asarray(bool(cfg.use_adaptive_R)),
         "forward_X_plus": states_plus,
         "forward_fas_p": p_plus,
         "forward_fascicle_segments": outputs_forward["fascicle_segments"],
