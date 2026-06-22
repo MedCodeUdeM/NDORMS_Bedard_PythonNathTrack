@@ -1,0 +1,24 @@
+Base median confidence: 0.717
+Base median R_scale: 3.443
+Base ANG delta RMSE: 0.0832 deg
+
+Largest median-confidence drops vs base:
+- motion_scale_2: confidence 0.607 (-0.110), R median 5.31
+- block_size_15: confidence 0.717 (+0.000), R median 3.44
+- r_min_1: confidence 0.717 (+0.000), R median 3.87
+- r_gamma_25: confidence 0.717 (+0.000), R median 1.33
+- r_gamma_1: confidence 0.717 (+0.000), R median 6.03
+
+Largest median-confidence increases vs base:
+- block_size_41: confidence 0.955 (+0.239), R median 0.69
+- motion_scale_5: confidence 0.819 (+0.102), R median 2.00
+- block_size_31: confidence 0.781 (+0.064), R median 2.51
+- block_size_15: confidence 0.717 (+0.000), R median 3.44
+- r_max_10: confidence 0.717 (+0.000), R median 1.93
+
+Highest median R_scale settings:
+- r_gamma_1: R median 6.03, R q90 11.69, ANG RMSE 0.0596
+- motion_scale_2: R median 5.31, R q90 11.27, ANG RMSE 0.0675
+- r_max_30: R median 4.95, R q90 13.32, ANG RMSE 0.0652
+- r_min_1: R median 3.87, R q90 9.26, ANG RMSE 0.4095
+- zncc_low_035: R median 3.44, R q90 8.79, ANG RMSE 0.0869

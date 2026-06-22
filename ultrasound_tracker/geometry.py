@@ -26,8 +26,8 @@ def line_angle(x1: float, y1: float, x2: float, y2: float,
 
     Uses the MATLAB UltraTimTrack convention: atan2(-dy, dx)
       - Horizontal right  →   0°
-      - Vertical downward →  90°
-      - Diagonal up-right → -45° (negative because image y-axis is flipped)
+      - Vertical downward → -90°
+      - Diagonal up-right →  45° (positive because image y-axis is flipped)
 
     Parameters
     ----------
@@ -870,4 +870,3 @@ if __name__ == "__main__":
     print(g)
 
     print("✓ All tests passed!")
-

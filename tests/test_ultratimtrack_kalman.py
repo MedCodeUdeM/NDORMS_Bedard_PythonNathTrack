@@ -1,6 +1,8 @@
 import numpy as np
 
-from ultrasound_tracker.ultratimtrack_kalman import (
+from ultrasound_tracker.legacy.ultratimtrack_kalman import (
+    IDX_ANGLE,
+    UltraTimTrackGeometricKalman,
     run_geometric_ultratimtrack_fusion,
     segment_from_state,
     state_from_segment,
@@ -89,3 +91,20 @@ def test_fusion_keeps_legacy_state_length_without_superficial_aponeurosis():
         atol=1e-5,
     )
     assert np.isnan(result["super_apo_angle_deg"][0])
+
+
+def test_partial_update_gain_diagonal_reports_measured_state_slot():
+    filt = UltraTimTrackGeometricKalman()
+    filt.initialize(np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float32), covariance=10.0)
+    filt.predict()
+
+    measurement = np.array([np.nan, np.nan, 35.0, np.nan], dtype=np.float32)
+    filt.update(measurement)
+
+    gain_diag = filt.get_last_gain_diagonal()
+
+    assert np.isnan(gain_diag[0])
+    assert np.isnan(gain_diag[1])
+    assert np.isfinite(gain_diag[IDX_ANGLE])
+    assert gain_diag[IDX_ANGLE] > 0.0
+    assert np.isnan(gain_diag[3])

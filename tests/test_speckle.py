@@ -1,6 +1,6 @@
 import numpy as np
 
-from ultrasound_tracker.speckle import (
+from ultrasound_tracker.legacy.speckle import (
     SpeckleCoherenceParams,
     robust_mad_sigma,
     speckle_pair_confidence,

@@ -55,6 +55,24 @@ class SpeckleConfidenceConfig:
             "geometry": 0.15,
         }
     )
+    theta_weights: Mapping[str, float] = field(
+        default_factory=lambda: {
+            "feature": 0.35,
+            "motion": 0.25,
+            "speckle": 0.20,
+            "geometry_alpha": 0.10,
+            "geometry_angle_jump": 0.10,
+        }
+    )
+    length_weights: Mapping[str, float] = field(
+        default_factory=lambda: {
+            "geometry_length": 0.25,
+            "aponeurosis": 0.25,
+            "intersection": 0.20,
+            "geometry_length_jump": 0.15,
+            "geometry": 0.15,
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -67,8 +85,12 @@ class ConfidenceMetrics:
     motion_consistency: float = 1.0
     feature_reliability: float = 1.0
     geometry_stability: float = 1.0
+    confidence_theta: float = 1.0
+    confidence_length: float = 1.0
     combined_confidence: float = 1.0
     r_scale: float = 1.0
+    r_scale_theta: float = 1.0
+    r_scale_length: float = 1.0
     detection_success: bool = True
 
 
@@ -474,7 +496,9 @@ def compute_geometry_stability(
         "geometry_pennation_score": float(pen_score),
         "geometry_length_score": float(length_score),
         "geometry_angle_jump_deg": float(angle_jump),
+        "geometry_angle_jump_score": float(angle_jump_score),
         "geometry_length_jump_px": float(length_jump),
+        "geometry_length_jump_score": float(length_jump_score),
     }
 
 
@@ -484,6 +508,15 @@ def _metric_value(metrics: Mapping[str, Any], key: str) -> float:
         "motion": "motion_consistency",
         "feature": "feature_reliability",
         "geometry": "geometry_stability",
+        "theta": "confidence_theta",
+        "length": "confidence_length",
+        "geometry_alpha": "geometry_alpha_score",
+        "geometry_pennation": "geometry_pennation_score",
+        "geometry_angle_jump": "geometry_angle_jump_score",
+        "geometry_length": "geometry_length_score",
+        "geometry_length_jump": "geometry_length_jump_score",
+        "aponeurosis": "aponeurosis_stability",
+        "intersection": "intersection_quality",
     }
     value = metrics.get(aliases.get(key, key), 1.0)
     try:
@@ -515,6 +548,44 @@ def combine_confidence_metrics(
     return _clip01(float(np.exp(log_sum / total_weight)), cfg)
 
 
+def combine_anisotropic_confidence_metrics(
+    metrics: ConfidenceMetrics | Mapping[str, Any],
+    theta_weights: Optional[Mapping[str, float]] = None,
+    length_weights: Optional[Mapping[str, float]] = None,
+    config: Optional[SpeckleConfidenceConfig] = None,
+) -> dict[str, float]:
+    """Return separate angle and length confidence scores.
+
+    The existing scalar confidence uses one weighted geometric mean,
+
+    ``c = exp(sum_i w_i log(c_i) / sum_i w_i)``.
+
+    This helper uses the same bounded geometric mean, but with two weight
+    groups.  ``confidence_theta`` is intended for the orientation/pennation
+    measurement variance and is driven mostly by Hough/Frangi feature support,
+    local speckle coherence, and coherent fascicle motion.  ``confidence_length``
+    is intended for the length-side measurement variance and is driven mostly
+    by aponeurosis/intersection/geometry terms.  If optional keys such as
+    ``aponeurosis_stability`` or ``intersection_quality`` are unavailable, they
+    default to neutral confidence ``1.0`` so existing callers remain compatible.
+    """
+
+    cfg = config or SpeckleConfidenceConfig()
+    metric_map = metrics.__dict__ if isinstance(metrics, ConfidenceMetrics) else metrics
+    return {
+        "confidence_theta": combine_confidence_metrics(
+            metric_map,
+            weights=theta_weights or cfg.theta_weights,
+            config=cfg,
+        ),
+        "confidence_length": combine_confidence_metrics(
+            metric_map,
+            weights=length_weights or cfg.length_weights,
+            config=cfg,
+        ),
+    }
+
+
 def confidence_to_r_scale(confidence: float, config: Optional[SpeckleConfidenceConfig] = None) -> float:
     """Map confidence in ``[0, 1]`` to a bounded measurement-noise scale."""
 
@@ -522,6 +593,53 @@ def confidence_to_r_scale(confidence: float, config: Optional[SpeckleConfidenceC
     c = float(np.clip(confidence, cfg.confidence_floor, cfg.confidence_ceiling))
     scale = float(cfg.r_min_scale) + (float(cfg.r_max_scale) - float(cfg.r_min_scale)) * (1.0 - c) ** float(cfg.r_gamma)
     return float(np.clip(scale, min(cfg.r_min_scale, cfg.r_max_scale), max(cfg.r_min_scale, cfg.r_max_scale)))
+
+
+def anisotropic_confidence_to_r_scales(
+    confidence_theta: float,
+    confidence_length: float,
+    config: Optional[SpeckleConfidenceConfig] = None,
+) -> dict[str, float]:
+    """Map theta and length confidence scores to bounded diagonal R scales.
+
+    For each component, the scalar mapping is reused unchanged:
+
+    ``s = r_min + (r_max - r_min) * (1 - c) ** r_gamma``.
+
+    The returned scales are meant for a diagonal covariance
+    ``diag([R_theta_0 * s_theta, R_L_0 * s_length])``.  The current
+    MATLAB-compatible Kalman implementation stores its internal diagonal as
+    ``[length-side x-state, theta alpha-state]``, so callers should pass
+    ``r_scale_length`` to the x/length side and ``r_scale_theta`` to alpha.
+    """
+
+    return {
+        "r_scale_theta": confidence_to_r_scale(confidence_theta, config),
+        "r_scale_length": confidence_to_r_scale(confidence_length, config),
+    }
+
+
+def adapt_anisotropic_measurement_covariance(
+    R_theta_base: float,
+    R_length_base: float,
+    confidence_theta: float,
+    confidence_length: float,
+    config: Optional[SpeckleConfidenceConfig] = None,
+) -> np.ndarray:
+    """Return ``diag([R_theta_0*s_theta, R_L_0*s_L])``.
+
+    This is a small convenience wrapper for documentation and tests.  The
+    Kalman filter itself uses the same scales, but its state order is
+    length-side ``x`` followed by orientation ``alpha`` for MATLAB parity.
+    """
+
+    scales = anisotropic_confidence_to_r_scales(confidence_theta, confidence_length, config)
+    return np.diag(
+        [
+            float(R_theta_base) * scales["r_scale_theta"],
+            float(R_length_base) * scales["r_scale_length"],
+        ]
+    ).astype(np.float64)
 
 
 def adapt_measurement_covariance(
@@ -533,4 +651,3 @@ def adapt_measurement_covariance(
 
     base = np.asarray(R_base, dtype=np.float64)
     return base * confidence_to_r_scale(confidence, config)
-

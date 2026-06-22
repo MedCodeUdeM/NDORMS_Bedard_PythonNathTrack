@@ -194,6 +194,8 @@ def run_matlab_2state_kalman(
     fixed_superficial_y: Optional[float] = None,
     mm_per_pixel: Optional[float] = None,
     measurement_r_scale: Optional[np.ndarray] = None,
+    measurement_r_scale_theta: Optional[np.ndarray] = None,
+    measurement_r_scale_length: Optional[np.ndarray] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Run a MATLAB-like 2-state forward filter plus optional RTS-style smoother.
@@ -207,6 +209,17 @@ def run_matlab_2state_kalman(
         TimTrack/Hough alpha measurements, one per frame.
     superficial_apo_lines, deep_apo_lines:
         Current aponeurosis lines used to reconstruct the final fascicle.
+    measurement_r_scale:
+        Backward-compatible scalar adaptive-R scale.  When provided without
+        per-component scales, both diagonal entries use this same multiplier.
+    measurement_r_scale_theta, measurement_r_scale_length:
+        Optional per-frame adaptive-R scales for anisotropic measurement noise.
+        ``measurement_r_scale_theta`` scales the alpha/orientation measurement
+        variance.  ``measurement_r_scale_length`` scales the length-side
+        superficial-attachment ``x`` measurement variance.  The internal state
+        order remains MATLAB-compatible ``[x_sup, alpha]``, so the stored
+        ``measurement_R_diag`` is ``[R_L, R_theta]`` even though the conceptual
+        measurement covariance is ``diag([R_theta, R_L])``.
 
     Notes
     -----
@@ -228,11 +241,27 @@ def run_matlab_2state_kalman(
     cfg = config or MatlabTwoStateKalmanConfig()
     n_start = max(1, min(int(cfg.n_start_frames), n))
     fixed_y = float(klt[0, 1] if fixed_superficial_y is None else fixed_superficial_y)
-    r_scale = _as_optional_scale(measurement_r_scale, "measurement_r_scale", n) if cfg.use_adaptive_R else np.ones(n)
+    if cfg.use_adaptive_R:
+        r_scale = _as_optional_scale(measurement_r_scale, "measurement_r_scale", n)
+        r_scale_theta = (
+            _as_optional_scale(measurement_r_scale_theta, "measurement_r_scale_theta", n)
+            if measurement_r_scale_theta is not None
+            else r_scale
+        )
+        r_scale_length = (
+            _as_optional_scale(measurement_r_scale_length, "measurement_r_scale_length", n)
+            if measurement_r_scale_length is not None
+            else r_scale
+        )
+    else:
+        r_scale = np.ones(n, dtype=np.float64)
+        r_scale_theta = np.ones(n, dtype=np.float64)
+        r_scale_length = np.ones(n, dtype=np.float64)
+    r_scale_summary = np.sqrt(r_scale_theta * r_scale_length)
     measurement_R_diag = np.column_stack(
         [
-            np.full(n, float(cfg.x_measurement_variance), dtype=np.float64) * r_scale,
-            np.full(n, float(cfg.alpha_measurement_variance), dtype=np.float64) * r_scale,
+            np.full(n, float(cfg.x_measurement_variance), dtype=np.float64) * r_scale_length,
+            np.full(n, float(cfg.alpha_measurement_variance), dtype=np.float64) * r_scale_theta,
         ]
     )
 
@@ -337,7 +366,10 @@ def run_matlab_2state_kalman(
         "fas_p_minus": p_minus,
         "kalman_gain": gains,
         "smoother_gain": smoother_gain,
-        "measurement_r_scale": r_scale,
+        "measurement_r_scale": r_scale_summary,
+        "measurement_r_scale_global": r_scale,
+        "measurement_r_scale_theta": r_scale_theta,
+        "measurement_r_scale_length": r_scale_length,
         "measurement_R_diag": measurement_R_diag,
         "use_adaptive_R": np.asarray(bool(cfg.use_adaptive_R)),
         "forward_X_plus": states_plus,

@@ -52,9 +52,9 @@ os.environ.setdefault("MPLCONFIGDIR", "/private/tmp/matplotlib")
 import ultrasound_tracker.geometry as geom
 import ultrasound_tracker.roi as roi
 import ultrasound_tracker.utils as ut
-from ultrasound_tracker.aponeurosis_detector import AponeurosisDetector
+from ultrasound_tracker.legacy.aponeurosis_detector import AponeurosisDetector
 from ultrasound_tracker.final_output import final_outputs_from_lines
-from ultrasound_tracker.frangi_detector import FrangiDetector
+from ultrasound_tracker.legacy.frangi_detector import FrangiDetector
 from ultrasound_tracker.timtrack_hough import DoHoughParams, dohough
 
 

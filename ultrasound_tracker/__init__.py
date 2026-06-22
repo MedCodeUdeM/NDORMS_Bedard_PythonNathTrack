@@ -1,84 +1,75 @@
-from .preprocessing import load_video, preprocess
-from .klt_tracker import KLTTracker
-from .hough_detector import HoughDetector
-from .frangi_detector import FrangiDetector
-from .matlab_aponeurosis import (
-    MatlabHoughAponeurosisConfig,
-    MatlabHoughAponeurosisDetector,
-    adaptive_threshold_matlab_style,
-    detect_matlab_hough_aponeuroses,
-    fit_apo_matlab_like,
-    get_aponeurosis_line_hough_matlab_like,
-    line_segment_from_polyfit_1b,
-    zero_outside_vertical_cut,
-)
-from .kalman_fusion import FascicleKalman
-from .speckle import (
-    SpeckleCoherenceParams,
-    SpeckleTracker,
-    compute_speckle_confidence_for_frames,
-    robust_mad_sigma,
-    speckle_pair_confidence,
+"""Public API for the current strict UltraTimTrack pipeline.
+
+Legacy prototypes are available from :mod:`ultrasound_tracker.legacy`, but they
+are intentionally not re-exported here.  This keeps ``import ultrasound_tracker``
+focused on the supported MATLAB-compatible tracking path.
+"""
+
+from . import geometry, roi
+from .matlab_aponeurosis import make_matlab_apox
+from .matlab_timtrack import (
+    detect_timtrack_geofeature_from_image,
+    fascicle_segment_from_geofeature,
+    run_timtrack_geofeatures_from_video,
 )
 from .speckle_confidence import (
-    ConfidenceMetrics,
     SpeckleConfidenceConfig,
-    adapt_measurement_covariance,
+    anisotropic_confidence_to_r_scales,
+    combine_anisotropic_confidence_metrics,
     combine_confidence_metrics,
+    adapt_anisotropic_measurement_covariance,
     compute_feature_detection_reliability,
     compute_geometry_stability,
     compute_motion_consistency,
     compute_speckle_coherence,
     confidence_to_r_scale,
-    zncc,
-)
-from .ultratimtrack_matlab_2state import (
-    MatlabTwoStateKalmanConfig,
-    reconstruct_fascicle_from_state,
-    run_matlab_2state_kalman,
-)
-from .ultratimtrack_aponeurosis import (
-    aponeurosis_state_from_lines,
-    lines_from_aponeurosis_state,
-    run_matlab_aponeurosis_state_video,
-)
-from .matlab_timtrack import (
-    alpha_from_saved_peaks,
-    compact_timtrack_geofeature,
-    detect_timtrack_geofeature_from_image,
-    fascicle_segment_from_aponeuroses_and_alpha,
-    fascicle_segment_from_geofeature,
-    extract_saved_peak_arrays,
-    filter_usimage_hough_matlab_like,
-    get_fascicle_mask_matlab_like,
-    run_timtrack_geofeatures_from_video,
-    reconstruct_saved_geofeature_alpha,
-)
-from .ultratrack_klt import (
-    UltraTrackKLTConfig,
-    apply_affine_1b,
-    estimate_affine_matlab_coords,
-    propagate_cumulative_affines,
-    run_one_step_affine_video,
-    run_one_step_affine_sequence,
-    tracking_masks_from_geofeature,
 )
 from .strict_fascicle_seed import (
     FascicleSeedScoringConfig,
     cluster_seed_candidates,
     extract_fascicle_seed_candidates,
-    score_fascicle_seed_candidate,
     select_autonomous_fascicle_seed,
 )
-from .optical_flow_dense import DenseFlowTracker
-from .utils import plot_results, save_results
-from .final_output import (
-    aponeurosis_thickness_px,
-    final_outputs_from_components,
-    final_outputs_from_lines,
-    image_depth_to_mm_per_pixel,
+from .ultratrack_klt import (
+    UltraTrackKLTConfig,
+    propagate_cumulative_affines,
+    read_gray_frames,
+    run_one_step_affine_video,
 )
-from . import geometry
+from .ultratimtrack_aponeurosis import run_matlab_aponeurosis_state_video
+from .ultratimtrack_matlab_2state import (
+    MatlabTwoStateKalmanConfig,
+    run_matlab_2state_kalman,
+)
 
-__version__ = "2.0.0"
-__author__ = "Alexandre Bédard — Oxford NDORMS, supervised by Jack Tu "
+__all__ = [
+    "FascicleSeedScoringConfig",
+    "MatlabTwoStateKalmanConfig",
+    "SpeckleConfidenceConfig",
+    "UltraTrackKLTConfig",
+    "adapt_anisotropic_measurement_covariance",
+    "anisotropic_confidence_to_r_scales",
+    "cluster_seed_candidates",
+    "combine_anisotropic_confidence_metrics",
+    "combine_confidence_metrics",
+    "compute_feature_detection_reliability",
+    "compute_geometry_stability",
+    "compute_motion_consistency",
+    "compute_speckle_coherence",
+    "confidence_to_r_scale",
+    "detect_timtrack_geofeature_from_image",
+    "extract_fascicle_seed_candidates",
+    "fascicle_segment_from_geofeature",
+    "geometry",
+    "make_matlab_apox",
+    "propagate_cumulative_affines",
+    "read_gray_frames",
+    "roi",
+    "run_matlab_2state_kalman",
+    "run_matlab_aponeurosis_state_video",
+    "run_one_step_affine_video",
+    "run_timtrack_geofeatures_from_video",
+    "select_autonomous_fascicle_seed",
+]
+
+__version__ = "2.1.0"

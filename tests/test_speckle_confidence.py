@@ -2,7 +2,10 @@ import numpy as np
 
 from ultrasound_tracker.speckle_confidence import (
     SpeckleConfidenceConfig,
+    adapt_anisotropic_measurement_covariance,
     adapt_measurement_covariance,
+    anisotropic_confidence_to_r_scales,
+    combine_anisotropic_confidence_metrics,
     compute_motion_consistency,
     compute_speckle_coherence,
     confidence_to_r_scale,
@@ -91,6 +94,67 @@ def test_adaptive_covariance_increases_when_confidence_decreases():
     assert np.all(np.diag(low) > np.diag(high))
 
 
+def test_anisotropic_confidence_splits_angle_and_length_terms():
+    config = SpeckleConfidenceConfig(r_min_scale=1.0, r_max_scale=20.0, r_gamma=1.5)
+    metrics = {
+        "speckle_confidence": 0.9,
+        "motion_consistency": 0.9,
+        "feature_reliability": 0.15,
+        "geometry_alpha_score": 0.2,
+        "geometry_angle_jump_score": 0.2,
+        "geometry_stability": 0.95,
+        "geometry_length_score": 0.95,
+        "geometry_length_jump_score": 0.95,
+        "aponeurosis_stability": 0.95,
+        "intersection_quality": 0.95,
+    }
+
+    confidence = combine_anisotropic_confidence_metrics(metrics, config=config)
+    scales = anisotropic_confidence_to_r_scales(
+        confidence["confidence_theta"],
+        confidence["confidence_length"],
+        config,
+    )
+    R = adapt_anisotropic_measurement_covariance(
+        R_theta_base=3.0,
+        R_length_base=100.0,
+        confidence_theta=confidence["confidence_theta"],
+        confidence_length=confidence["confidence_length"],
+        config=config,
+    )
+
+    assert confidence["confidence_theta"] < confidence["confidence_length"]
+    assert scales["r_scale_theta"] > scales["r_scale_length"]
+    assert R[0, 0] > 3.0
+    assert R[1, 1] < 1.5 * 100.0
+
+
+def test_anisotropic_confidence_length_terms_can_drive_length_scale_only():
+    config = SpeckleConfidenceConfig(r_min_scale=1.0, r_max_scale=20.0, r_gamma=1.5)
+    metrics = {
+        "speckle_confidence": 0.95,
+        "motion_consistency": 0.95,
+        "feature_reliability": 0.95,
+        "geometry_alpha_score": 0.95,
+        "geometry_angle_jump_score": 0.95,
+        "geometry_stability": 0.2,
+        "geometry_length_score": 0.15,
+        "geometry_length_jump_score": 0.15,
+        "aponeurosis_stability": 0.15,
+        "intersection_quality": 0.15,
+    }
+
+    confidence = combine_anisotropic_confidence_metrics(metrics, config=config)
+    scales = anisotropic_confidence_to_r_scales(
+        confidence["confidence_theta"],
+        confidence["confidence_length"],
+        config,
+    )
+
+    assert confidence["confidence_length"] < confidence["confidence_theta"]
+    assert scales["r_scale_length"] > scales["r_scale_theta"]
+
+
 def test_fixed_r_ignores_adaptive_scale_when_disabled():
     klt = np.array(
         [
@@ -156,3 +220,68 @@ def test_adaptive_r_scales_measurement_diag_when_enabled():
 
     np.testing.assert_allclose(out["measurement_R_diag"][1], [500.0, 15.0])
 
+
+def test_low_angle_scale_only_inflates_alpha_measurement_variance():
+    klt = np.array(
+        [
+            [80.0, 10.0, 30.0, 60.0],
+            [81.0, 10.0, 31.0, 60.0],
+        ],
+        dtype=float,
+    )
+    superficial = np.tile(np.array([[1.0, 10.0, 101.0, 10.0]]), (2, 1))
+    deep = np.tile(np.array([[1.0, 60.0, 101.0, 60.0]]), (2, 1))
+    alpha = np.array([45.0, 44.0])
+    config = MatlabTwoStateKalmanConfig(
+        x_measurement_variance=100.0,
+        alpha_measurement_variance=3.0,
+        run_smoother=False,
+        use_adaptive_R=True,
+    )
+
+    out = run_matlab_2state_kalman(
+        klt,
+        alpha,
+        superficial,
+        deep,
+        config=config,
+        measurement_r_scale_theta=np.array([1.0, 5.0]),
+        measurement_r_scale_length=np.array([1.0, 1.0]),
+    )
+
+    np.testing.assert_allclose(out["measurement_R_diag"][1], [100.0, 15.0])
+    np.testing.assert_allclose(out["measurement_r_scale_theta"][1], 5.0)
+    np.testing.assert_allclose(out["measurement_r_scale_length"][1], 1.0)
+
+
+def test_low_length_scale_only_inflates_x_length_measurement_variance():
+    klt = np.array(
+        [
+            [80.0, 10.0, 30.0, 60.0],
+            [81.0, 10.0, 31.0, 60.0],
+        ],
+        dtype=float,
+    )
+    superficial = np.tile(np.array([[1.0, 10.0, 101.0, 10.0]]), (2, 1))
+    deep = np.tile(np.array([[1.0, 60.0, 101.0, 60.0]]), (2, 1))
+    alpha = np.array([45.0, 44.0])
+    config = MatlabTwoStateKalmanConfig(
+        x_measurement_variance=100.0,
+        alpha_measurement_variance=3.0,
+        run_smoother=False,
+        use_adaptive_R=True,
+    )
+
+    out = run_matlab_2state_kalman(
+        klt,
+        alpha,
+        superficial,
+        deep,
+        config=config,
+        measurement_r_scale_theta=np.array([1.0, 1.0]),
+        measurement_r_scale_length=np.array([1.0, 5.0]),
+    )
+
+    np.testing.assert_allclose(out["measurement_R_diag"][1], [500.0, 3.0])
+    np.testing.assert_allclose(out["measurement_r_scale_theta"][1], 1.0)
+    np.testing.assert_allclose(out["measurement_r_scale_length"][1], 5.0)

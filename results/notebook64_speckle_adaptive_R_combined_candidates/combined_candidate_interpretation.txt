@@ -1,0 +1,19 @@
+Base median confidence: 0.717
+Base q10 confidence: 0.435
+Base median R_scale: 3.443
+Base R_scale q90: 8.790
+Base ANG delta RMSE: 0.0781 deg
+Base FL delta RMSE: 0.1106 mm
+
+Combined candidates sorted by ANG delta RMSE:
+- strict_conf_r4: ANG 0.0669 deg, FL 0.1180 mm, conf q10 0.326, R median/q90 5.31/11.29
+- aggressive_R_map: ANG 0.0705 deg, FL 0.1283 mm, conf q10 0.435, R median/q90 8.86/17.18
+- base_21_24_r8: ANG 0.0781 deg, FL 0.1106 mm, conf q10 0.435, R median/q90 3.44/8.79
+- efficient_r4: ANG 0.0880 deg, FL 0.1241 mm, conf q10 0.495, R median/q90 3.44/7.51
+- smooth_block31_r4: ANG 0.1041 deg, FL 0.1528 mm, conf q10 0.559, R median/q90 1.47/6.20
+- strict_conf_aggressive_R: ANG 0.1235 deg, FL 0.2554 mm, conf q10 0.326, R median/q90 12.11/20.38
+
+Most promising next full-video candidates:
+- strict_conf_r4: stricter ZNCC, forward-backward, and motion-coherence penalties (ANG 0.0669, FL 0.1180, R median/q90 5.31/11.29)
+- aggressive_R_map: same confidence as base, but stronger R response when confidence falls (ANG 0.0705, FL 0.1283, R median/q90 8.86/17.18)
+- efficient_r4: same confidence rule, smaller search radius for speed and fewer false searches (ANG 0.0880, FL 0.1241, R median/q90 3.44/7.51)

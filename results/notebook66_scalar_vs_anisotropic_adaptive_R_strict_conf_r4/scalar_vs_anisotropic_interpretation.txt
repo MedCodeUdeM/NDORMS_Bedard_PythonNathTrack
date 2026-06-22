@@ -1,0 +1,5 @@
+first30s: scalar ANG RMSE=0.0545 deg, anisotropic ANG RMSE=0.1953 deg; scalar FL RMSE=0.1088 mm, anisotropic FL RMSE=0.3234 mm.
+full_video: scalar ANG RMSE=0.1287 deg, anisotropic ANG RMSE=0.1381 deg; scalar FL RMSE=0.2887 mm, anisotropic FL RMSE=0.2645 mm.
+
+R-scale medians/full video:
+scalar=5.31, theta=0.55, length=0.57; q90 scalar=11.37, theta=2.08, length=0.85.

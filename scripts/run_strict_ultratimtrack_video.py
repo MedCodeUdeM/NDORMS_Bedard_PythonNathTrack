@@ -59,6 +59,8 @@ from ultrasound_tracker.matlab_timtrack import (
 )
 from ultrasound_tracker.speckle_confidence import (
     SpeckleConfidenceConfig,
+    anisotropic_confidence_to_r_scales,
+    combine_anisotropic_confidence_metrics,
     combine_confidence_metrics,
     compute_feature_detection_reliability,
     compute_geometry_stability,
@@ -464,10 +466,19 @@ def compute_confidence_series(
         "feature_mask_score": np.full(n, np.nan, dtype=np.float64),
         "feature_mask_density": np.full(n, np.nan, dtype=np.float64),
         "geometry_stability": np.ones(n, dtype=np.float64),
+        "geometry_alpha_score": np.full(n, np.nan, dtype=np.float64),
+        "geometry_pennation_score": np.full(n, np.nan, dtype=np.float64),
+        "geometry_length_score": np.full(n, np.nan, dtype=np.float64),
         "geometry_angle_jump_deg": np.full(n, np.nan, dtype=np.float64),
+        "geometry_angle_jump_score": np.full(n, np.nan, dtype=np.float64),
         "geometry_length_jump_px": np.full(n, np.nan, dtype=np.float64),
+        "geometry_length_jump_score": np.full(n, np.nan, dtype=np.float64),
+        "confidence_theta": np.ones(n, dtype=np.float64),
+        "confidence_length": np.ones(n, dtype=np.float64),
         "combined_confidence": np.ones(n, dtype=np.float64),
         "r_scale": np.ones(n, dtype=np.float64),
+        "r_scale_theta": np.ones(n, dtype=np.float64),
+        "r_scale_length": np.ones(n, dtype=np.float64),
         "detection_success": np.ones(n, dtype=bool),
     }
 
@@ -512,8 +523,13 @@ def compute_confidence_series(
         out["feature_mask_density"][idx] = float(feature.get("feature_mask_density", np.nan))
         out["detection_success"][idx] = bool(feature["detection_success"])
         out["geometry_stability"][idx] = float(geometry["geometry_stability"])
+        out["geometry_alpha_score"][idx] = float(geometry["geometry_alpha_score"])
+        out["geometry_pennation_score"][idx] = float(geometry["geometry_pennation_score"])
+        out["geometry_length_score"][idx] = float(geometry["geometry_length_score"])
         out["geometry_angle_jump_deg"][idx] = float(geometry["geometry_angle_jump_deg"])
+        out["geometry_angle_jump_score"][idx] = float(geometry["geometry_angle_jump_score"])
         out["geometry_length_jump_px"][idx] = float(geometry["geometry_length_jump_px"])
+        out["geometry_length_jump_score"][idx] = float(geometry["geometry_length_jump_score"])
         combined = combine_confidence_metrics(
             {
                 "speckle_confidence": out["speckle_confidence"][idx],
@@ -525,6 +541,28 @@ def compute_confidence_series(
         )
         out["combined_confidence"][idx] = combined
         out["r_scale"][idx] = confidence_to_r_scale(combined, cfg)
+        anisotropic_conf = combine_anisotropic_confidence_metrics(
+            {
+                "speckle_confidence": out["speckle_confidence"][idx],
+                "motion_consistency": out["motion_consistency"][idx],
+                "feature_reliability": out["feature_reliability"][idx],
+                "geometry_stability": out["geometry_stability"][idx],
+                "geometry_alpha_score": out["geometry_alpha_score"][idx],
+                "geometry_angle_jump_score": out["geometry_angle_jump_score"][idx],
+                "geometry_length_score": out["geometry_length_score"][idx],
+                "geometry_length_jump_score": out["geometry_length_jump_score"][idx],
+            },
+            config=cfg,
+        )
+        out["confidence_theta"][idx] = anisotropic_conf["confidence_theta"]
+        out["confidence_length"][idx] = anisotropic_conf["confidence_length"]
+        anisotropic_scales = anisotropic_confidence_to_r_scales(
+            anisotropic_conf["confidence_theta"],
+            anisotropic_conf["confidence_length"],
+            cfg,
+        )
+        out["r_scale_theta"][idx] = anisotropic_scales["r_scale_theta"]
+        out["r_scale_length"][idx] = anisotropic_scales["r_scale_length"]
 
         if progress_every and idx > 0 and (idx % int(progress_every) == 0 or idx == n - 1):
             print(f"confidence processed {idx + 1}/{n}")
@@ -538,24 +576,37 @@ def save_confidence_plot(path: Path, arrays: Mapping[str, np.ndarray]) -> None:
     time_s = np.asarray(arrays["time_s"], dtype=np.float64)
     confidence = np.asarray(arrays["combined_confidence"], dtype=np.float64)
     r_scale = np.asarray(arrays.get("r_scale", np.full_like(confidence, np.nan)), dtype=np.float64)
+    confidence_theta = np.asarray(arrays.get("confidence_theta", confidence), dtype=np.float64)
+    confidence_length = np.asarray(arrays.get("confidence_length", confidence), dtype=np.float64)
     angle = np.asarray(arrays.get("ANG_deg", np.full_like(confidence, np.nan)), dtype=np.float64)
     length = np.asarray(arrays.get("FL_mm", arrays.get("FL_px", np.full_like(confidence, np.nan))), dtype=np.float64)
     length_label = "FL (mm)" if "FL_mm" in arrays else "FL (px)"
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(4, 1, figsize=(11, 9), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(11, 10.5), sharex=True)
     axes[0].plot(time_s, confidence, color="tab:purple", linewidth=1.6)
+    axes[0].plot(time_s, confidence_theta, color="tab:red", linewidth=1.0, alpha=0.75, label="theta")
+    axes[0].plot(time_s, confidence_length, color="tab:green", linewidth=1.0, alpha=0.75, label="length")
     axes[0].set_ylabel("confidence")
     axes[0].set_ylim(0, 1.05)
-    axes[1].plot(time_s, r_scale, color="tab:orange", linewidth=1.4)
+    axes[0].legend(loc="lower right", fontsize=8)
+    axes[1].plot(time_s, r_scale, color="tab:orange", linewidth=1.4, label="global")
+    if "r_scale_theta" in arrays:
+        axes[1].plot(time_s, arrays["r_scale_theta"], color="tab:red", linewidth=1.0, alpha=0.75, label="theta")
+    if "r_scale_length" in arrays:
+        axes[1].plot(time_s, arrays["r_scale_length"], color="tab:green", linewidth=1.0, alpha=0.75, label="length")
     axes[1].set_ylabel("R scale")
+    axes[1].legend(loc="upper right", fontsize=8)
     axes[2].plot(time_s, angle, color="tab:red", linewidth=1.2)
-    axes[2].scatter(time_s, angle, c=confidence, cmap="RdYlGn", vmin=0, vmax=1, s=12)
+    axes[2].scatter(time_s, angle, c=confidence_theta, cmap="RdYlGn", vmin=0, vmax=1, s=12)
     axes[2].set_ylabel("ANG (deg)")
     axes[3].plot(time_s, length, color="tab:green", linewidth=1.2)
-    axes[3].scatter(time_s, length, c=confidence, cmap="RdYlGn", vmin=0, vmax=1, s=12)
+    axes[3].scatter(time_s, length, c=confidence_length, cmap="RdYlGn", vmin=0, vmax=1, s=12)
     axes[3].set_ylabel(length_label)
-    axes[3].set_xlabel("Time (s)")
+    axes[4].plot(time_s, confidence_theta - confidence_length, color="tab:gray", linewidth=1.2)
+    axes[4].axhline(0.0, color="black", linewidth=0.8)
+    axes[4].set_ylabel("c_theta-c_L")
+    axes[4].set_xlabel("Time (s)")
     for ax in axes:
         ax.grid(True, alpha=0.25)
     fig.suptitle("Adaptive confidence diagnostics")
@@ -759,6 +810,8 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         config=kalman_run_config,
         mm_per_pixel=mm_per_px if np.isfinite(mm_per_px) else None,
         measurement_r_scale=confidence_arrays.get("r_scale") if args.adaptive_r else None,
+        measurement_r_scale_theta=confidence_arrays.get("r_scale_theta") if args.adaptive_r else None,
+        measurement_r_scale_length=confidence_arrays.get("r_scale_length") if args.adaptive_r else None,
     )
 
     frames = np.arange(len(final["ANG_deg"]), dtype=np.int32)
@@ -785,7 +838,15 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     if "measurement_R_diag" in final:
         arrays["R_t_x_variance"] = np.asarray(final["measurement_R_diag"], dtype=np.float64)[:, 0]
         arrays["R_t_alpha_variance"] = np.asarray(final["measurement_R_diag"], dtype=np.float64)[:, 1]
+        arrays["R_t_length_variance"] = arrays["R_t_x_variance"]
+        arrays["R_t_theta_variance"] = arrays["R_t_alpha_variance"]
         arrays["kalman_measurement_r_scale"] = np.asarray(final["measurement_r_scale"], dtype=np.float64)
+        arrays["kalman_measurement_r_scale_theta"] = np.asarray(
+            final["measurement_r_scale_theta"], dtype=np.float64
+        )
+        arrays["kalman_measurement_r_scale_length"] = np.asarray(
+            final["measurement_r_scale_length"], dtype=np.float64
+        )
 
     npz_path = run_dir / f"{args.name}_strict_results.npz"
     np.savez_compressed(npz_path, **arrays)
@@ -807,13 +868,26 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "feature_mask_score",
         "feature_mask_density",
         "geometry_stability",
+        "geometry_alpha_score",
+        "geometry_pennation_score",
+        "geometry_length_score",
         "geometry_angle_jump_deg",
+        "geometry_angle_jump_score",
         "geometry_length_jump_px",
+        "geometry_length_jump_score",
+        "confidence_theta",
+        "confidence_length",
         "combined_confidence",
         "r_scale",
+        "r_scale_theta",
+        "r_scale_length",
         "R_t_x_variance",
         "R_t_alpha_variance",
+        "R_t_length_variance",
+        "R_t_theta_variance",
         "kalman_measurement_r_scale",
+        "kalman_measurement_r_scale_theta",
+        "kalman_measurement_r_scale_length",
         "detection_success",
     ]
     for idx in range(len(frames)):
