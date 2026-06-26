@@ -6,5 +6,6 @@ filterpy
 imageio
 scikit-image
 pandas
+pillow
 jupyter
 pytest

@@ -1,0 +1,69 @@
+dataset,frame,super_line_rejected,deep_line_rejected,endpoint_reject_count,super_reason,deep_reason,raw_alpha,persistent_alpha,alpha_rejected,alpha_reason
+test_23june_2,35,False,False,0,,,14.5,27.5,True,raw jump 12.5deg; chose candidate 27.5deg near previous 27.0deg
+test_23june_2,36,False,False,0,,,14.5,27.5,True,raw jump 13.0deg; chose candidate 27.5deg near previous 27.5deg
+test_23june_2,37,False,False,0,,,14.5,27.5,True,raw jump 13.0deg; chose candidate 27.5deg near previous 27.5deg
+test_23june_2,38,False,False,0,,,10.0,14.5,True,raw jump 17.5deg; chose candidate 14.5deg near previous 27.5deg
+test_23june_2,59,False,False,0,,,30.5,14.5,True,raw jump 10.0deg; chose candidate 14.5deg near previous 20.5deg
+test_23june_2,60,False,False,0,,,30.5,14.5,True,raw jump 16.0deg; chose candidate 14.5deg near previous 14.5deg
+test_23june_2,66,False,False,0,,,8.0,16.5,True,raw jump 8.5deg; chose candidate 16.5deg near previous 16.5deg
+test_23june_2,72,False,False,0,,,32.0,16.0,True,raw jump 15.5deg; chose candidate 16.0deg near previous 16.5deg
+test_23june_2,73,False,False,0,,,34.0,16.0,True,raw jump 18.0deg; chose candidate 16.0deg near previous 16.0deg
+test_23june_2,74,False,False,0,,,34.5,16.5,True,raw jump 18.5deg; chose candidate 16.5deg near previous 16.0deg
+test_23june_2,75,False,False,0,,,33.0,17.0,True,raw jump 16.5deg; chose candidate 17.0deg near previous 16.5deg
+test_23june_2,76,False,False,0,,,31.5,17.5,True,raw jump 14.5deg; chose candidate 17.5deg near previous 17.0deg
+test_23june_2,77,False,False,0,,,32.0,17.5,True,raw jump 14.5deg; chose candidate 17.5deg near previous 17.5deg
+test_23june_2,78,False,False,0,,,30.0,23.5,True,raw jump 12.5deg; chose candidate 23.5deg near previous 17.5deg
+test_23june_2,85,False,True,2,,mid jump/innovation 3.6/12.8px; near maxangle 18.8deg,18.5,18.5,False,
+test_23june_2,86,False,True,2,,mid jump/innovation 4.0/13.5px; near maxangle 18.1deg,11.0,11.0,False,
+test_23june_2,87,False,True,2,,mid jump/innovation 7.0/18.2px; near maxangle 20.0deg,11.0,11.0,False,
+test_23june_2,88,False,True,2,,mid jump/innovation 7.4/19.6px; near maxangle 20.0deg,22.0,10.5,True,raw jump 11.0deg; chose candidate 10.5deg near previous 11.0deg
+test_23june_2,89,False,True,2,,mid jump/innovation 7.8/20.0px; near maxangle 20.0deg,22.0,10.5,True,raw jump 11.5deg; chose candidate 10.5deg near previous 10.5deg
+test_23june_2,90,False,True,2,,mid jump/innovation 7.4/19.9px; near maxangle 20.0deg,16.0,16.0,False,
+test_23june_2,91,False,True,2,,mid jump/innovation 9.6/22.3px; near maxangle 20.0deg,20.0,20.0,False,
+test_23june_2,92,False,True,2,,mid jump/innovation 10.5/23.2px; near maxangle 20.0deg,22.0,22.0,False,
+test_23june_2,93,False,True,2,,mid jump/innovation 10.7/23.1px; near maxangle 20.0deg,19.5,19.5,False,
+test_23june_2,94,False,True,2,,mid jump/innovation 10.2/22.3px; near maxangle 20.0deg,13.0,13.0,False,
+test_23june_2,95,False,True,2,,mid jump/innovation 10.4/22.6px; near maxangle 20.0deg,22.0,13.0,True,raw jump 9.0deg; chose candidate 13.0deg near previous 13.0deg
+test_23june_2,96,False,True,2,,mid jump/innovation 10.0/22.1px; near maxangle 20.0deg,11.5,11.5,False,
+test_23june_2,97,False,True,2,,mid jump/innovation 10.1/22.3px; near maxangle 20.0deg,15.5,15.5,False,
+test_23june_2,98,False,True,2,,mid jump/innovation 9.5/21.7px; near maxangle 20.0deg,15.5,15.5,False,
+test_23june_2,99,False,True,2,,mid jump/innovation 11.1/23.2px; near maxangle 20.0deg,15.5,15.5,False,
+test_23june_2,100,False,True,2,,mid jump/innovation 11.8/23.6px; near maxangle 20.0deg,11.5,11.5,False,
+test_23june_2,101,False,True,2,,mid jump/innovation 9.1/20.9px; near maxangle 20.0deg,16.0,16.0,False,
+test_23june_2,102,False,True,2,,mid jump/innovation 11.3/23.5px; near maxangle 20.0deg,11.5,11.5,False,
+test_23june_2,103,False,True,2,,mid jump/innovation 11.0/23.3px; near maxangle 20.0deg,14.0,14.0,False,
+test_23june_2,104,False,True,2,,mid jump/innovation 10.0/22.5px; near maxangle 20.0deg,21.5,21.5,False,
+test_23june_2,105,False,True,2,,mid jump/innovation 6.1/18.9px; near maxangle 20.0deg,21.5,21.5,False,
+test_23june_2,106,False,True,2,,mid jump/innovation 3.2/16.7px; near maxangle 20.0deg,11.0,23.0,True,raw jump 10.5deg; chose candidate 23.0deg near previous 21.5deg
+test_23june_2,107,False,True,2,,mid jump/innovation 5.0/10.2px; near maxangle 20.0deg,18.0,18.0,False,
+test_23june_2,108,False,True,2,,mid jump/innovation 8.5/7.7px; near maxangle 20.0deg,16.0,16.0,False,
+test_23june_2,109,False,True,2,,mid jump/innovation 9.2/8.5px; near maxangle 20.0deg,17.0,17.0,False,
+test_23june_2,110,False,True,2,,mid jump/innovation 11.8/7.9px; near maxangle 20.0deg,17.5,17.5,False,
+test_23june_2,111,False,True,2,,mid jump/innovation 16.6/5.0px; near maxangle 20.0deg; giant mid displacement,16.0,16.0,False,
+test_23june_2,112,False,True,2,,mid jump/innovation 20.4/2.6px; near maxangle 19.3deg; giant mid displacement,20.0,20.0,False,
+test_23june_2,113,False,True,2,,mid jump/innovation 22.1/1.0px; near maxangle 18.5deg; giant mid displacement,19.0,19.0,False,
+test_23june_2,114,False,True,2,,mid jump/innovation 23.5/0.4px; giant mid displacement,21.0,21.0,False,
+test_23june_2,115,False,True,2,,mid jump/innovation 25.5/3.2px; giant mid displacement,31.5,16.5,True,raw jump 10.5deg; chose candidate 16.5deg near previous 21.0deg
+test_23june_2,116,False,True,2,,mid jump/innovation 32.7/11.2px; angle jump 5.5deg; giant mid displacement,32.0,14.0,True,raw jump 15.5deg; chose candidate 14.0deg near previous 16.5deg
+test_23june_2,117,False,True,2,,mid jump/innovation 32.7/12.1px; angle jump 4.8deg; giant mid displacement,34.5,13.5,True,raw jump 20.5deg; chose candidate 13.5deg near previous 14.0deg
+test_23june_2,118,False,True,2,,mid jump/innovation 33.0/13.9px; angle jump 4.3deg; giant mid displacement,35.0,14.0,True,raw jump 21.5deg; chose candidate 14.0deg near previous 13.5deg
+test_23june_2,119,False,True,2,,mid jump/innovation 29.3/11.5px; angle jump 4.8deg; giant mid displacement,34.0,13.5,True,raw jump 20.0deg; chose candidate 13.5deg near previous 14.0deg
+test_23june_2,120,False,True,2,,mid jump/innovation 29.2/12.2px; angle jump 4.8deg; giant mid displacement,24.5,9.0,True,raw jump 11.0deg; chose candidate 9.0deg near previous 13.5deg
+test_23june_2,121,False,True,2,,mid jump/innovation 30.3/14.0px; angle jump 4.8deg; giant mid displacement,24.0,9.5,True,raw jump 15.0deg; chose candidate 9.5deg near previous 9.0deg
+test_23june_2,122,False,True,2,,mid jump/innovation 27.3/11.9px; angle jump 4.7deg; giant mid displacement,24.5,9.5,True,raw jump 15.0deg; chose candidate 9.5deg near previous 9.5deg
+test_23june_2,123,False,True,2,,mid jump/innovation 27.8/14.2px; angle jump 5.7deg; giant mid displacement,12.0,12.0,False,
+test_23june_2,124,False,True,2,,mid jump/innovation 26.3/14.4px; angle jump 5.7deg; giant mid displacement,26.0,8.0,True,raw jump 14.0deg; chose candidate 8.0deg near previous 12.0deg
+test_23june_2,125,False,True,2,,mid jump/innovation 26.5/16.8px; angle jump 5.0deg; giant mid displacement,31.5,6.5,True,raw jump 23.5deg; chose candidate 6.5deg near previous 8.0deg
+test_23june_2,126,False,True,2,,mid jump/innovation 24.9/16.2px; angle jump 6.8deg; giant mid displacement,32.0,6.5,True,raw jump 25.5deg; chose candidate 6.5deg near previous 6.5deg
+test_23june_2,127,False,True,2,,mid jump/innovation 24.7/17.6px; angle jump 7.0deg; giant mid displacement,33.0,33.0,False,raw jump 26.5deg; no persistent candidate within 14.0deg
+test_23june_2,128,False,True,2,,mid jump/innovation 24.0/18.1px; angle jump 8.5deg; giant mid displacement,35.0,35.0,False,
+test_23june_2,129,False,True,2,,mid jump/innovation 25.8/20.8px; angle jump 9.2deg; giant mid displacement,35.0,35.0,False,
+test_23june_2,130,False,True,2,,mid jump/innovation 26.1/21.8px; angle jump 9.2deg; giant mid displacement,34.5,34.5,False,
+test_23june_2,131,False,True,2,,mid jump/innovation 23.4/20.2px; angle jump 9.8deg; giant mid displacement,35.0,35.0,False,
+test_23june_2,132,False,True,2,,mid jump/innovation 22.5/20.9px; angle jump 10.0deg; giant mid displacement,36.0,36.0,False,
+test_23june_2,133,False,True,2,,mid jump/innovation 22.7/22.2px; angle jump 10.9deg; giant mid displacement,34.5,34.5,False,
+test_23june_2,134,False,True,2,,mid jump/innovation 20.2/21.7px; angle jump 11.1deg; giant mid displacement,32.0,32.0,False,
+test_23june_2,135,False,True,2,,mid jump/innovation 19.8/22.4px; angle jump 11.2deg; giant mid displacement,31.0,31.0,False,
+test_23june_2,136,False,True,2,,mid jump/innovation 17.7/22.1px; angle jump 12.1deg; giant mid displacement,30.5,30.5,False,
+test_23june_2,137,False,True,2,,mid jump/innovation 16.1/21.4px; angle jump 11.3deg; giant mid displacement,29.5,29.5,False,
+test_23june_2,138,False,True,2,,mid jump/innovation 16.4/22.3px; angle jump 11.2deg; giant mid displacement,30.0,30.0,False,

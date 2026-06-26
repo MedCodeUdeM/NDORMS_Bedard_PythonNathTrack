@@ -12,6 +12,7 @@ TimTrack's detected ``super_pos`` / ``deep_pos`` values update them.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -28,6 +29,28 @@ from .ultratrack_klt import (
     tracking_masks_from_geofeature,
 )
 from .ultratimtrack_matlab_2state import matlab_scalar_kalman_update
+
+
+@dataclass(frozen=True)
+class AponeurosisGatingConfig:
+    """Optional anatomical measurement gate for aponeurosis endpoint updates."""
+
+    enabled: bool = False
+    endpoint_innovation_px: float = 32.0
+    endpoint_jump_px: float = 32.0
+    mid_innovation_px: float = 10.0
+    super_mid_jump_px: float = 12.0
+    deep_mid_jump_px: float = 6.0
+    angle_jump_deg: float = 2.5
+    near_maxangle_fraction: float = 0.90
+    giant_mid_jump_px: float = 16.0
+    giant_mid_innovation_px: float = 24.0
+    soft_fraction: float = 0.65
+    soft_r_scale: float = 12.0
+    hard_r_scale: float = 1.0e6
+    max_consecutive_rejections: int = 3
+    super_maxangle_deg: Optional[float] = None
+    deep_maxangle_deg: Optional[float] = None
 
 
 def aponeurosis_state_from_lines(superficial_line_1b: np.ndarray, deep_line_1b: np.ndarray) -> np.ndarray:
@@ -67,6 +90,165 @@ def _transform_endpoint_state(state_y: np.ndarray, affine: np.ndarray, width: in
     return np.asarray([transformed[0, 1], transformed[1, 1], transformed[2, 1], transformed[3, 1]], dtype=np.float64)
 
 
+def _line_mid_angle(line_1b: np.ndarray) -> tuple[float, float]:
+    line = np.asarray(line_1b, dtype=np.float64).reshape(4)
+    dx = line[2] - line[0]
+    if abs(dx) <= 1e-12:
+        return float((line[1] + line[3]) / 2.0), float("nan")
+    slope = (line[3] - line[1]) / dx
+    angle = -float(np.rad2deg(np.arctan2(slope, 1.0)))
+    return float((line[1] + line[3]) / 2.0), angle
+
+
+def gate_aponeurosis_measurement_state(
+    prior_state: np.ndarray,
+    measurement_state: np.ndarray,
+    previous_measurement_state: np.ndarray,
+    previous_filtered_state: np.ndarray,
+    *,
+    width: int,
+    config: AponeurosisGatingConfig,
+    consecutive_rejections: np.ndarray | Sequence[int] | None = None,
+) -> dict[str, np.ndarray]:
+    """Gate one aponeurosis endpoint measurement against prior and recent motion."""
+
+    prior = np.asarray(prior_state, dtype=np.float64).reshape(4)
+    measurement = np.asarray(measurement_state, dtype=np.float64).reshape(4)
+    prev_measurement = np.asarray(previous_measurement_state, dtype=np.float64).reshape(4)
+    prev_filtered = np.asarray(previous_filtered_state, dtype=np.float64).reshape(4)
+    consecutive = (
+        np.zeros(2, dtype=np.int32)
+        if consecutive_rejections is None
+        else np.asarray(consecutive_rejections, dtype=np.int32).reshape(2).copy()
+    )
+
+    out_measurement = measurement.copy()
+    r_scale = np.ones(4, dtype=np.float64)
+    rejected = np.zeros(4, dtype=bool)
+    soft_downweighted = np.zeros(4, dtype=bool)
+    line_rejected = np.zeros(2, dtype=bool)
+    line_soft = np.zeros(2, dtype=bool)
+    reasons = np.asarray(["", ""], dtype=object)
+    next_consecutive = consecutive.copy()
+
+    if not bool(config.enabled):
+        return {
+            "measurement_state": out_measurement,
+            "r_scale": r_scale,
+            "rejected_endpoints": rejected,
+            "soft_downweighted_endpoints": soft_downweighted,
+            "line_rejected": line_rejected,
+            "line_soft_downweighted": line_soft,
+            "reasons": reasons,
+            "consecutive_rejections": next_consecutive,
+        }
+
+    prior_lines = lines_from_aponeurosis_state(prior, width)
+    measurement_lines = lines_from_aponeurosis_state(measurement, width)
+    prev_measurement_lines = lines_from_aponeurosis_state(prev_measurement, width)
+    prev_filtered_lines = lines_from_aponeurosis_state(prev_filtered, width)
+
+    for side_idx, (name, endpoint_idx, maxangle) in enumerate(
+        [
+            ("superficial", np.asarray([0, 1]), config.super_maxangle_deg),
+            ("deep", np.asarray([2, 3]), config.deep_maxangle_deg),
+        ]
+    ):
+        prior_mid, _ = _line_mid_angle(prior_lines[side_idx])
+        measurement_mid, measurement_angle = _line_mid_angle(measurement_lines[side_idx])
+        prev_measurement_mid, prev_measurement_angle = _line_mid_angle(prev_measurement_lines[side_idx])
+        prev_filtered_mid, _ = _line_mid_angle(prev_filtered_lines[side_idx])
+
+        mid_innovation = abs(measurement_mid - prior_mid)
+        mid_jump = abs(measurement_mid - prev_measurement_mid)
+        filtered_jump = abs(measurement_mid - prev_filtered_mid)
+        angle_jump = abs(measurement_angle - prev_measurement_angle)
+        mid_jump_limit = config.deep_mid_jump_px if name == "deep" else config.super_mid_jump_px
+
+        near_maxangle = (
+            maxangle is not None
+            and np.isfinite(float(maxangle))
+            and float(maxangle) > 0.0
+            and np.isfinite(measurement_angle)
+            and abs(measurement_angle) >= config.near_maxangle_fraction * abs(float(maxangle))
+        )
+        huge_mid = mid_jump > config.giant_mid_jump_px or mid_innovation > config.giant_mid_innovation_px
+        suspicious_mid = mid_jump > mid_jump_limit or mid_innovation > config.mid_innovation_px
+        suspicious_angle = np.isfinite(angle_jump) and angle_jump > config.angle_jump_deg
+        hard_line = bool(huge_mid or (near_maxangle and (suspicious_mid or suspicious_angle)))
+        force_reacquire = consecutive[side_idx] >= int(config.max_consecutive_rejections)
+
+        reason_parts: list[str] = []
+        if suspicious_mid:
+            reason_parts.append(
+                f"mid jump/innovation {mid_jump:.1f}/{mid_innovation:.1f}px"
+            )
+        if filtered_jump > mid_jump_limit:
+            reason_parts.append(f"filtered jump {filtered_jump:.1f}px")
+        if suspicious_angle:
+            reason_parts.append(f"angle jump {angle_jump:.1f}deg")
+        if near_maxangle:
+            reason_parts.append(f"near maxangle {measurement_angle:.1f}deg")
+        if huge_mid:
+            reason_parts.append("giant mid displacement")
+        if force_reacquire and hard_line:
+            reason_parts.append("forced reacquisition after repeated rejects")
+
+        if hard_line and not force_reacquire:
+            out_measurement[endpoint_idx] = prior[endpoint_idx]
+            r_scale[endpoint_idx] = float(config.hard_r_scale)
+            rejected[endpoint_idx] = True
+            line_rejected[side_idx] = True
+            next_consecutive[side_idx] += 1
+            reasons[side_idx] = "; ".join(reason_parts)
+            continue
+
+        soft_line = bool(suspicious_mid or suspicious_angle or (hard_line and force_reacquire))
+        if soft_line:
+            line_soft[side_idx] = True
+            next_consecutive[side_idx] = 0
+            reasons[side_idx] = "; ".join(reason_parts)
+        else:
+            next_consecutive[side_idx] = 0
+
+        for idx in endpoint_idx:
+            endpoint_innovation = abs(measurement[idx] - prior[idx])
+            endpoint_jump = abs(measurement[idx] - prev_measurement[idx])
+            endpoint_soft = (
+                soft_line
+                or endpoint_innovation > config.endpoint_innovation_px * config.soft_fraction
+                or endpoint_jump > config.endpoint_jump_px * config.soft_fraction
+            )
+            endpoint_hard = (
+                near_maxangle
+                and not force_reacquire
+                and (
+                    endpoint_innovation > config.endpoint_innovation_px
+                    or endpoint_jump > config.endpoint_jump_px
+                )
+            )
+            if endpoint_hard:
+                out_measurement[idx] = prior[idx]
+                r_scale[idx] = float(config.hard_r_scale)
+                rejected[idx] = True
+                line_rejected[side_idx] = True
+                next_consecutive[side_idx] += 1
+            elif endpoint_soft:
+                r_scale[idx] = max(r_scale[idx], float(config.soft_r_scale))
+                soft_downweighted[idx] = True
+
+    return {
+        "measurement_state": out_measurement,
+        "r_scale": r_scale,
+        "rejected_endpoints": rejected,
+        "soft_downweighted_endpoints": soft_downweighted,
+        "line_rejected": line_rejected,
+        "line_soft_downweighted": line_soft,
+        "reasons": reasons,
+        "consecutive_rejections": next_consecutive,
+    }
+
+
 def run_matlab_aponeurosis_state_video(
     video_path: str | Path,
     geofeatures: Sequence[Mapping],
@@ -78,6 +260,7 @@ def run_matlab_aponeurosis_state_video(
     q_parameter: float = 0.01,
     measurement_variance: np.ndarray | Sequence[float] | None = None,
     config: UltraTrackKLTConfig | None = None,
+    gating_config: AponeurosisGatingConfig | None = None,
     limit: Optional[int] = None,
     progress_every: Optional[int] = None,
 ) -> dict[str, np.ndarray]:
@@ -138,7 +321,20 @@ def run_matlab_aponeurosis_state_video(
     affine_ok = np.zeros(n, dtype=bool)
     affine_matrices = np.full((n, 2, 3), np.nan, dtype=np.float32)
 
+    gate_cfg = gating_config or AponeurosisGatingConfig(enabled=False)
+    measurement_states = np.full((n, 4), np.nan, dtype=np.float64)
+    accepted_measurement_states = np.full((n, 4), np.nan, dtype=np.float64)
+    gating_r_scale = np.ones((n, 4), dtype=np.float64)
+    rejected_endpoints = np.zeros((n, 4), dtype=bool)
+    soft_downweighted_endpoints = np.zeros((n, 4), dtype=bool)
+    line_rejected = np.zeros((n, 2), dtype=bool)
+    line_soft_downweighted = np.zeros((n, 2), dtype=bool)
+    gating_reasons = np.full((n, 2), "", dtype=object)
+    consecutive_rejections = np.zeros((n, 2), dtype=np.int32)
+
     states_plus[0] = aponeurosis_state_from_lines(super_meas[0], deep_meas[0])
+    measurement_states[0] = states_plus[0]
+    accepted_measurement_states[0] = states_plus[0]
     states_minus[0] = states_plus[0]
     p_plus[0] = r_values
     p_minus[0] = r_values
@@ -162,6 +358,15 @@ def run_matlab_aponeurosis_state_video(
             inlier_count = inlier_count[:frame]
             affine_ok = affine_ok[:frame]
             affine_matrices = affine_matrices[:frame]
+            measurement_states = measurement_states[:frame]
+            accepted_measurement_states = accepted_measurement_states[:frame]
+            gating_r_scale = gating_r_scale[:frame]
+            rejected_endpoints = rejected_endpoints[:frame]
+            soft_downweighted_endpoints = soft_downweighted_endpoints[:frame]
+            line_rejected = line_rejected[:frame]
+            line_soft_downweighted = line_soft_downweighted[:frame]
+            gating_reasons = gating_reasons[:frame]
+            consecutive_rejections = consecutive_rejections[:frame]
             break
 
         gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY) if current_frame.ndim == 3 else current_frame.copy()
@@ -194,6 +399,28 @@ def run_matlab_aponeurosis_state_video(
         states_minus[frame] = prior_state
         prior_super_lines[frame], prior_deep_lines[frame] = lines_from_aponeurosis_state(prior_state, width)
         measurement_state = aponeurosis_state_from_lines(super_meas[frame], deep_meas[frame])
+        gate = gate_aponeurosis_measurement_state(
+            prior_state,
+            measurement_state,
+            accepted_measurement_states[frame - 1],
+            states_plus[frame - 1],
+            width=width,
+            config=gate_cfg,
+            consecutive_rejections=consecutive_rejections[frame - 1],
+        )
+        gated_measurement_state = np.asarray(gate["measurement_state"], dtype=np.float64)
+        measurement_states[frame] = measurement_state
+        accepted_measurement_states[frame] = measurement_state.copy()
+        accepted_measurement_states[frame][gate["rejected_endpoints"]] = accepted_measurement_states[frame - 1][
+            gate["rejected_endpoints"]
+        ]
+        gating_r_scale[frame] = np.asarray(gate["r_scale"], dtype=np.float64)
+        rejected_endpoints[frame] = np.asarray(gate["rejected_endpoints"], dtype=bool)
+        soft_downweighted_endpoints[frame] = np.asarray(gate["soft_downweighted_endpoints"], dtype=bool)
+        line_rejected[frame] = np.asarray(gate["line_rejected"], dtype=bool)
+        line_soft_downweighted[frame] = np.asarray(gate["line_soft_downweighted"], dtype=bool)
+        gating_reasons[frame] = np.asarray(gate["reasons"], dtype=object)
+        consecutive_rejections[frame] = np.asarray(gate["consecutive_rejections"], dtype=np.int32)
         delta = np.abs(prior_state - states_plus[frame - 1])
 
         for idx in range(4):
@@ -206,8 +433,8 @@ def run_matlab_aponeurosis_state_video(
                 prior_state[idx],
                 p_plus[frame - 1, idx],
                 float(q_parameter) * float(delta[idx]) ** 2,
-                measurement_state[idx],
-                r_values[idx],
+                gated_measurement_state[idx],
+                r_values[idx] * gating_r_scale[frame, idx],
             )
 
         super_lines[frame], deep_lines[frame] = lines_from_aponeurosis_state(states_plus[frame], width)
@@ -232,4 +459,13 @@ def run_matlab_aponeurosis_state_video(
         "affine_ok": affine_ok,
         "affine_matrices": affine_matrices,
         "measurement_variance": r_values,
+        "measurement_states": measurement_states,
+        "accepted_measurement_states": accepted_measurement_states,
+        "gating_r_scale": gating_r_scale,
+        "rejected_endpoints": rejected_endpoints,
+        "soft_downweighted_endpoints": soft_downweighted_endpoints,
+        "line_rejected": line_rejected,
+        "line_soft_downweighted": line_soft_downweighted,
+        "gating_reasons": gating_reasons.astype(str),
+        "consecutive_rejections": consecutive_rejections,
     }

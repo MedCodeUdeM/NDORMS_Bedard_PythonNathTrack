@@ -1,0 +1,221 @@
+Frame,raw_alpha_deg,selected_alpha_deg,selected_candidate_idx,raw_alpha_rejected,reason,n_candidates,angle_min_deg,angle_max_deg,max_angle_step_deg
+0,24.0,24.0,6,False,first frame,10,5.0,60.0,8.0
+1,23.0,23.0,6,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+2,24.0,24.0,4,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+3,23.0,23.0,8,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+4,23.0,23.0,5,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+5,24.0,24.0,5,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+6,18.5,18.5,8,False,raw alpha jump 5.50deg within limit,10,5.0,60.0,8.0
+7,23.0,23.0,6,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+8,18.5,18.5,7,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+9,18.5,18.5,7,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+10,18.5,18.5,6,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+11,14.0,14.0,7,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+12,16.5,16.5,6,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+13,14.0,14.0,6,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+14,14.0,14.0,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+15,14.0,14.0,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+16,14.0,14.0,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+17,13.5,13.5,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+18,14.0,14.0,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+19,14.0,14.0,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+20,13.5,13.5,5,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+21,14.0,14.0,5,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+22,18.5,18.5,6,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+23,24.5,24.5,3,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+24,18.5,18.5,9,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+25,14.0,14.0,5,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+26,18.5,18.5,5,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+27,18.5,18.5,6,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+28,13.5,13.5,2,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+29,13.5,13.5,4,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+30,9.5,9.5,7,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+31,13.5,13.5,2,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+32,8.5,8.5,0,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+33,13.5,13.5,2,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+34,10.0,10.0,6,False,raw alpha jump 3.50deg within limit,10,5.0,60.0,8.0
+35,9.5,9.5,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+36,8.5,8.5,0,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+37,8.5,8.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+38,13.5,13.5,5,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+39,13.5,13.5,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+40,13.5,13.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+41,13.5,13.5,4,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+42,13.5,13.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+43,13.5,13.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+44,13.5,13.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+45,13.5,13.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+46,13.5,13.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+47,24.0,13.5,3,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+48,24.0,13.5,0,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+49,14.0,14.0,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+50,24.0,14.0,7,True,raw alpha jump 10.00deg; selected candidate 14.00deg near previous 14.00deg,10,5.0,60.0,8.0
+51,23.0,13.5,1,True,raw alpha jump 9.00deg; selected candidate 13.50deg near previous 14.00deg,10,5.0,60.0,8.0
+52,24.5,13.5,0,True,raw alpha jump 11.00deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+53,23.0,13.5,0,True,raw alpha jump 9.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+54,23.0,13.5,0,True,raw alpha jump 9.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+55,23.0,13.5,1,True,raw alpha jump 9.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+56,13.5,13.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+57,23.0,13.5,0,True,raw alpha jump 9.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+58,13.5,13.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+59,24.0,13.5,0,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+60,24.0,13.5,0,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+61,24.0,13.5,0,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+62,24.0,13.5,0,True,raw alpha jump 10.50deg; selected candidate 13.50deg near previous 13.50deg,10,5.0,60.0,8.0
+63,16.5,16.5,9,False,raw alpha jump 3.00deg within limit,10,5.0,60.0,8.0
+64,18.5,18.5,7,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+65,23.0,23.0,9,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+66,13.5,24.0,5,True,raw alpha jump 9.50deg; selected candidate 24.00deg near previous 23.00deg,10,5.0,60.0,8.0
+67,13.5,24.0,5,True,raw alpha jump 10.50deg; selected candidate 24.00deg near previous 24.00deg,10,5.0,60.0,8.0
+68,13.5,24.5,4,True,raw alpha jump 10.50deg; selected candidate 24.50deg near previous 24.00deg,10,5.0,60.0,8.0
+69,13.5,24.5,4,True,raw alpha jump 11.00deg; selected candidate 24.50deg near previous 24.50deg,10,5.0,60.0,8.0
+70,14.0,25.0,1,True,raw alpha jump 10.50deg; selected candidate 25.00deg near previous 24.50deg,10,5.0,60.0,8.0
+71,13.5,25.0,0,True,raw alpha jump 11.50deg; selected candidate 25.00deg near previous 25.00deg,10,5.0,60.0,8.0
+72,13.5,24.5,0,True,raw alpha jump 11.50deg; selected candidate 24.50deg near previous 25.00deg,10,5.0,60.0,8.0
+73,9.5,25.0,1,True,raw alpha jump 15.00deg; selected candidate 25.00deg near previous 24.50deg,10,5.0,60.0,8.0
+74,10.0,25.0,0,True,raw alpha jump 15.00deg; selected candidate 25.00deg near previous 25.00deg,10,5.0,60.0,8.0
+75,16.5,25.0,0,True,raw alpha jump 8.50deg; selected candidate 25.00deg near previous 25.00deg,10,5.0,60.0,8.0
+76,13.5,25.0,2,True,raw alpha jump 11.50deg; selected candidate 25.00deg near previous 25.00deg,10,5.0,60.0,8.0
+77,12.5,25.5,0,True,raw alpha jump 12.50deg; selected candidate 25.50deg near previous 25.00deg,10,5.0,60.0,8.0
+78,23.0,23.0,8,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+79,13.5,24.5,2,True,raw alpha jump 9.50deg; selected candidate 24.50deg near previous 23.00deg,10,5.0,60.0,8.0
+80,25.5,25.5,0,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+81,25.5,25.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+82,23.5,23.5,9,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+83,25.5,25.5,0,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+84,25.5,25.5,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+85,27.5,27.5,5,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+86,27.5,27.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+87,26.5,26.5,3,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+88,30.0,30.0,2,False,raw alpha jump 3.50deg within limit,10,5.0,60.0,8.0
+89,30.0,30.0,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+90,29.0,29.0,9,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+91,27.5,27.5,2,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+92,18.0,27.5,4,True,raw alpha jump 9.50deg; selected candidate 27.50deg near previous 27.50deg,10,5.0,60.0,8.0
+93,18.5,30.0,8,True,raw alpha jump 9.00deg; selected candidate 30.00deg near previous 27.50deg,10,5.0,60.0,8.0
+94,17.5,33.5,5,True,raw alpha jump 12.50deg; selected candidate 33.50deg near previous 30.00deg,10,5.0,60.0,8.0
+95,12.5,36.0,9,True,raw alpha jump 21.00deg; selected candidate 36.00deg near previous 33.50deg,10,5.0,60.0,8.0
+96,12.5,33.5,3,True,raw alpha jump 23.50deg; selected candidate 33.50deg near previous 36.00deg,10,5.0,60.0,8.0
+97,8.0,8.0,5,False,raw alpha jump 25.50deg; no candidate within 8.00deg of previous,10,5.0,60.0,8.0
+98,8.0,8.0,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+99,8.0,8.0,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+100,8.5,8.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+101,8.5,8.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+102,10.5,10.5,3,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+103,25.0,10.0,2,True,raw alpha jump 14.50deg; selected candidate 10.00deg near previous 10.50deg,10,5.0,60.0,8.0
+104,24.5,10.0,2,True,raw alpha jump 14.50deg; selected candidate 10.00deg near previous 10.00deg,10,5.0,60.0,8.0
+105,13.0,13.0,6,False,raw alpha jump 3.00deg within limit,10,5.0,60.0,8.0
+106,25.0,12.0,2,True,raw alpha jump 12.00deg; selected candidate 12.00deg near previous 13.00deg,10,5.0,60.0,8.0
+107,23.5,12.0,4,True,raw alpha jump 11.50deg; selected candidate 12.00deg near previous 12.00deg,10,5.0,60.0,8.0
+108,23.0,12.0,9,True,raw alpha jump 11.00deg; selected candidate 12.00deg near previous 12.00deg,10,5.0,60.0,8.0
+109,23.0,11.5,3,True,raw alpha jump 11.00deg; selected candidate 11.50deg near previous 12.00deg,10,5.0,60.0,8.0
+110,24.0,12.5,7,True,raw alpha jump 12.50deg; selected candidate 12.50deg near previous 11.50deg,10,5.0,60.0,8.0
+111,23.0,12.5,6,True,raw alpha jump 10.50deg; selected candidate 12.50deg near previous 12.50deg,10,5.0,60.0,8.0
+112,23.0,14.0,8,True,raw alpha jump 10.50deg; selected candidate 14.00deg near previous 12.50deg,10,5.0,60.0,8.0
+113,23.0,14.5,6,True,raw alpha jump 9.00deg; selected candidate 14.50deg near previous 14.00deg,10,5.0,60.0,8.0
+114,17.5,17.5,3,False,raw alpha jump 3.00deg within limit,10,5.0,60.0,8.0
+115,21.5,21.5,2,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+116,19.5,19.5,8,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+117,19.0,19.0,6,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+118,12.5,12.5,1,False,raw alpha jump 6.50deg within limit,10,5.0,60.0,8.0
+119,14.0,14.0,4,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+120,14.5,14.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+121,10.5,10.5,0,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+122,9.0,9.0,6,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+123,8.5,8.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+124,8.5,8.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+125,8.0,8.0,2,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+126,7.5,7.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+127,8.0,8.0,6,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+128,12.5,12.5,7,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+129,19.5,19.5,2,False,raw alpha jump 7.00deg within limit,10,5.0,60.0,8.0
+130,15.0,15.0,9,False,raw alpha jump 4.50deg within limit,10,5.0,60.0,8.0
+131,10.0,10.0,5,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+132,10.0,10.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+133,16.0,16.0,4,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+134,16.5,16.5,9,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+135,30.5,18.0,9,True,raw alpha jump 14.00deg; selected candidate 18.00deg near previous 16.50deg,10,5.0,60.0,8.0
+136,32.0,24.0,6,True,raw alpha jump 14.00deg; selected candidate 24.00deg near previous 18.00deg,10,5.0,60.0,8.0
+137,31.5,31.5,0,False,raw alpha jump 7.50deg within limit,10,5.0,60.0,8.0
+138,24.0,24.0,0,False,raw alpha jump 7.50deg within limit,10,5.0,60.0,8.0
+139,24.0,24.0,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+140,22.5,22.5,2,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+141,9.0,23.5,0,True,raw alpha jump 13.50deg; selected candidate 23.50deg near previous 22.50deg,10,5.0,60.0,8.0
+142,10.5,23.0,2,True,raw alpha jump 13.00deg; selected candidate 23.00deg near previous 23.50deg,10,5.0,60.0,8.0
+143,10.0,22.5,2,True,raw alpha jump 13.00deg; selected candidate 22.50deg near previous 23.00deg,10,5.0,60.0,8.0
+144,10.5,22.5,4,True,raw alpha jump 12.00deg; selected candidate 22.50deg near previous 22.50deg,10,5.0,60.0,8.0
+145,20.0,20.0,9,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+146,18.5,18.5,3,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+147,21.0,21.0,1,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+148,21.0,21.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+149,32.0,20.5,0,True,raw alpha jump 11.00deg; selected candidate 20.50deg near previous 21.00deg,10,5.0,60.0,8.0
+150,32.0,20.0,3,True,raw alpha jump 11.50deg; selected candidate 20.00deg near previous 20.50deg,10,5.0,60.0,8.0
+151,31.0,27.5,7,True,raw alpha jump 11.00deg; selected candidate 27.50deg near previous 20.00deg,10,5.0,60.0,8.0
+152,33.0,33.0,0,False,raw alpha jump 5.50deg within limit,10,5.0,60.0,8.0
+153,32.5,32.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+154,33.0,33.0,0,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+155,33.0,33.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+156,33.0,33.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+157,31.0,31.0,4,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+158,32.0,32.0,1,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+159,31.5,31.5,1,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+160,29.0,29.0,1,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+161,28.5,28.5,3,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+162,27.5,27.5,2,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+163,29.0,29.0,2,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+164,28.5,28.5,2,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+165,29.5,29.5,3,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+166,27.5,27.5,2,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+167,26.5,26.5,0,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+168,25.5,25.5,1,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+169,26.0,26.0,0,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+170,25.5,25.5,0,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+171,17.5,17.5,7,False,raw alpha jump 8.00deg within limit,10,5.0,60.0,8.0
+172,24.5,24.5,6,False,raw alpha jump 7.00deg within limit,10,5.0,60.0,8.0
+173,24.5,24.5,3,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+174,24.0,24.0,0,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+175,21.5,21.5,6,False,raw alpha jump 2.50deg within limit,10,5.0,60.0,8.0
+176,21.5,21.5,6,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+177,21.5,21.5,9,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+178,23.0,23.0,1,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+179,23.0,23.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+180,21.5,21.5,3,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+181,13.0,22.0,3,True,raw alpha jump 8.50deg; selected candidate 22.00deg near previous 21.50deg,10,5.0,60.0,8.0
+182,19.0,19.0,6,False,raw alpha jump 3.00deg within limit,10,5.0,60.0,8.0
+183,19.0,19.0,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+184,12.5,12.5,2,False,raw alpha jump 6.50deg within limit,10,5.0,60.0,8.0
+185,15.5,15.5,9,False,raw alpha jump 3.00deg within limit,10,5.0,60.0,8.0
+186,15.5,15.5,9,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+187,17.5,17.5,7,False,raw alpha jump 2.00deg within limit,10,5.0,60.0,8.0
+188,17.0,17.0,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+189,18.0,18.0,9,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+190,12.0,12.0,1,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+191,11.0,11.0,1,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+192,17.0,17.0,2,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+193,23.0,23.0,3,False,raw alpha jump 6.00deg within limit,10,5.0,60.0,8.0
+194,16.5,16.5,3,False,raw alpha jump 6.50deg within limit,10,5.0,60.0,8.0
+195,12.5,12.5,8,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+196,16.5,16.5,8,False,raw alpha jump 4.00deg within limit,10,5.0,60.0,8.0
+197,11.5,11.5,0,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+198,11.5,11.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+199,11.5,11.5,2,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+200,11.5,11.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+201,11.5,11.5,0,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+202,11.5,11.5,4,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+203,11.5,11.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+204,11.5,11.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+205,11.5,11.5,1,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+206,12.5,12.5,5,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+207,12.5,12.5,4,False,raw alpha jump 0.00deg within limit,10,5.0,60.0,8.0
+208,12.0,12.0,7,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+209,17.0,17.0,2,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0
+210,11.5,11.5,2,False,raw alpha jump 5.50deg within limit,10,5.0,60.0,8.0
+211,12.0,12.0,3,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+212,11.0,11.0,2,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+213,12.5,12.5,4,False,raw alpha jump 1.50deg within limit,10,5.0,60.0,8.0
+214,12.0,12.0,0,False,raw alpha jump 0.50deg within limit,10,5.0,60.0,8.0
+215,17.5,17.5,7,False,raw alpha jump 5.50deg within limit,10,5.0,60.0,8.0
+216,18.5,18.5,8,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+217,19.5,19.5,9,False,raw alpha jump 1.00deg within limit,10,5.0,60.0,8.0
+218,16.0,16.0,4,False,raw alpha jump 3.50deg within limit,10,5.0,60.0,8.0
+219,11.0,11.0,8,False,raw alpha jump 5.00deg within limit,10,5.0,60.0,8.0

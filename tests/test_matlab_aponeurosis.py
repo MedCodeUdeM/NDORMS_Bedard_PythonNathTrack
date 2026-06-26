@@ -5,6 +5,7 @@ from ultrasound_tracker.matlab_aponeurosis import (
     MatlabHoughAponeurosisConfig,
     MatlabHoughAponeurosisDetector,
     detect_matlab_hough_aponeuroses,
+    fit_apo_matlab_like,
     get_aponeurosis_line_hough_matlab_like,
     line_segment_from_polyfit_1b,
     zero_outside_vertical_cut,
@@ -49,6 +50,17 @@ def test_line_segment_from_polyfit_1b_converts_to_zero_based_segment():
 
     np.testing.assert_allclose(line, np.array([0.0, 24.0, 99.0, 24.0]))
     assert np.isclose(line_angle_from_array(line), 0.0)
+
+
+def test_fit_apo_matlab_like_clips_angle_symmetrically():
+    x = np.linspace(1.0, 120.0, 20)
+
+    for raw_angle, expected_angle in [(15.0, 10.0), (-15.0, -10.0), (8.0, 8.0)]:
+        y = -np.tan(np.deg2rad(raw_angle)) * x + 40.0
+        coef = fit_apo_matlab_like(x, y, fit_method="enforce_maxangle", maxangle=10.0, order=1)
+        fitted_angle = -np.rad2deg(np.arctan2(coef[0], 1.0))
+
+        assert np.isclose(fitted_angle, expected_angle, atol=1e-6)
 
 
 def test_detect_matlab_hough_aponeuroses_finds_two_horizontal_bands():

@@ -325,8 +325,10 @@ def fit_apo_matlab_like(
     if int(order) == 1 and fit_method == "enforce_maxangle":
         slope, intercept = coef
         fit_angle = -float(_atan2d(slope, 1.0))
-        if fit_angle > float(maxangle):
-            slope = -float(np.tan(np.deg2rad(maxangle)))
+        angle_limit = abs(float(maxangle))
+        if np.isfinite(angle_limit) and abs(fit_angle) > angle_limit:
+            clipped_angle = float(np.clip(fit_angle, -angle_limit, angle_limit))
+            slope = -float(np.tan(np.deg2rad(clipped_angle)))
             intercept = float(np.mean(y[valid] - slope * x[valid]))
             coef = np.array([slope, intercept], dtype=np.float64)
     return coef

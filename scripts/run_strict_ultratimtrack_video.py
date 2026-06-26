@@ -21,9 +21,9 @@ import json
 import os
 import sys
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import cv2
 import numpy as np
@@ -79,7 +79,10 @@ from ultrasound_tracker.ultratrack_klt import (
     propagate_cumulative_affines,
     run_one_step_affine_video,
 )
-from ultrasound_tracker.ultratimtrack_aponeurosis import run_matlab_aponeurosis_state_video
+from ultrasound_tracker.ultratimtrack_aponeurosis import (
+    AponeurosisGatingConfig,
+    run_matlab_aponeurosis_state_video,
+)
 from ultrasound_tracker.ultratimtrack_matlab_2state import (
     MatlabTwoStateKalmanConfig,
     run_matlab_2state_kalman,
@@ -87,6 +90,24 @@ from ultrasound_tracker.ultratimtrack_matlab_2state import (
 
 
 VIDEO_EXTENSIONS = [".avi", ".AVI", ".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV"]
+KALMAN_MODES = ("fixed", "adaptive-scalar", "adaptive-anisotropic")
+
+
+@dataclass(frozen=True)
+class FascicleCandidatePersistenceConfig:
+    """Frame-to-frame fascicle candidate persistence settings."""
+
+    enabled: bool = False
+    angle_min_deg: float = 5.0
+    angle_max_deg: float = 60.0
+    max_angle_step_deg: float = 8.0
+    hough_weight_bonus_deg: float = 2.0
+
+
+def kalman_mode_uses_confidence(mode: str) -> bool:
+    """Return whether a Kalman mode needs per-frame confidence metrics."""
+
+    return mode in {"adaptive-scalar", "adaptive-anisotropic"}
 
 
 def list_videos_in_raw(raw_dir: Path) -> list[Path]:
@@ -130,6 +151,38 @@ def prompt_yes_no(question: str, default: bool = True) -> bool:
         if answer in {"n", "no", "non"}:
             return False
         print("Please answer yes/no.")
+
+
+def prompt_kalman_mode(default: str = "fixed") -> str:
+    """Prompt for the strict runner Kalman mode."""
+
+    aliases = {
+        "normal": "fixed",
+        "fixed": "fixed",
+        "n": "fixed",
+        "scalar": "adaptive-scalar",
+        "adaptive-scalar": "adaptive-scalar",
+        "s": "adaptive-scalar",
+        "adaptive": "adaptive-anisotropic",
+        "anisotropic": "adaptive-anisotropic",
+        "adaptive-anisotropic": "adaptive-anisotropic",
+        "a": "adaptive-anisotropic",
+    }
+    default = aliases.get(str(default).strip().lower(), "fixed")
+
+    print("\nKalman filter mode:")
+    print("  1. normal fixed-R Kalman")
+    print("  2. scalar adaptive-R Kalman")
+    print("  3. anisotropic adaptive-R Kalman")
+    while True:
+        answer = input(f"Choose Kalman mode [default: {default}]: ").strip().lower()
+        if answer == "":
+            return default
+        if answer in {"1", "2", "3"}:
+            return KALMAN_MODES[int(answer) - 1]
+        if answer in aliases:
+            return aliases[answer]
+        print("Please enter 1, 2, 3, normal, scalar, or anisotropic.")
 
 
 def read_first_frame(video_path: Path) -> tuple[np.ndarray, float, int]:
@@ -223,6 +276,58 @@ def update_parms_from_rois(parms: dict, rois: Mapping[str, roi.ROI], frame_shape
     return out
 
 
+def apply_aponeurosis_maxangle_overrides(
+    parms: dict,
+    *,
+    apo_maxangle: float | None = None,
+    super_apo_maxangle: float | None = None,
+    deep_apo_maxangle: float | None = None,
+) -> dict:
+    """Override aponeurosis fit angle limits in-place on a copied parms dict."""
+
+    updates = {
+        "super": super_apo_maxangle if super_apo_maxangle is not None else apo_maxangle,
+        "deep": deep_apo_maxangle if deep_apo_maxangle is not None else apo_maxangle,
+    }
+    if not any(value is not None for value in updates.values()):
+        return parms
+
+    apo = parms.setdefault("apo", {})
+    for key, value in updates.items():
+        if value is None:
+            continue
+        value = float(value)
+        if not np.isfinite(value) or value < 0:
+            raise ValueError("Aponeurosis maxangle overrides must be finite and non-negative.")
+        apo.setdefault(key, {})
+        apo[key]["fit_method"] = "enforce_maxangle"
+        apo[key]["maxangle"] = value
+    return parms
+
+
+def apply_fascicle_angle_overrides(
+    parms: dict,
+    *,
+    fas_angle_min: float | None = None,
+    fas_angle_max: float | None = None,
+) -> dict:
+    """Override TimTrack fascicle Hough angle range in-place on a copied parms dict."""
+
+    if fas_angle_min is None and fas_angle_max is None:
+        return parms
+
+    fas = parms.setdefault("fas", {})
+    current = np.asarray(fas.get("range", [5.0, 60.0]), dtype=np.float64).reshape(-1)
+    if current.size < 2:
+        current = np.asarray([5.0, 60.0], dtype=np.float64)
+    low = float(current[0] if fas_angle_min is None else fas_angle_min)
+    high = float(current[1] if fas_angle_max is None else fas_angle_max)
+    if not np.isfinite(low) or not np.isfinite(high) or low >= high:
+        raise ValueError("Fascicle angle range must be finite with min < max.")
+    fas["range"] = np.asarray([low, high], dtype=np.float64)
+    return parms
+
+
 def geofeature_measurement_lines(geofeatures: list[Mapping], width: int) -> tuple[np.ndarray, np.ndarray]:
     super_lines = []
     deep_lines = []
@@ -236,6 +341,233 @@ def geofeature_measurement_lines(geofeatures: list[Mapping], width: int) -> tupl
 
 def geofeature_alpha(geofeatures: list[Mapping]) -> np.ndarray:
     return np.asarray([float(np.asarray(entry["alpha"]).reshape(-1)[0]) for entry in geofeatures], dtype=np.float64)
+
+
+def _entry_candidate_arrays(entry: Mapping, *, max_candidates: int = 10) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    alphas = np.asarray(entry.get("alphas", []), dtype=np.float64).reshape(-1)[:max_candidates]
+    weights = np.asarray(entry.get("weights", entry.get("ws", [])), dtype=np.float64).reshape(-1)[:max_candidates]
+    x_lines = np.asarray(entry.get("x", []), dtype=np.float64)
+    y_lines = np.asarray(entry.get("y", []), dtype=np.float64)
+    if x_lines.ndim != 2 or x_lines.shape[1] < 2:
+        x_lines = np.full((len(alphas), 2), np.nan, dtype=np.float64)
+    else:
+        x_lines = x_lines[:max_candidates, :2]
+    if y_lines.ndim != 2 or y_lines.shape[1] < 2:
+        y_lines = np.full((len(alphas), 2), np.nan, dtype=np.float64)
+    else:
+        y_lines = y_lines[:max_candidates, :2]
+    n = min(len(alphas), len(weights), len(x_lines), len(y_lines))
+    return alphas[:n], weights[:n], x_lines[:n], y_lines[:n]
+
+
+def select_fascicle_candidate_persistence(
+    geofeatures: Sequence[Mapping],
+    raw_alpha_deg: np.ndarray,
+    *,
+    config: FascicleCandidatePersistenceConfig,
+) -> dict[str, Any]:
+    """
+    Prefer fascicle Hough candidates that persist from the previous selected angle.
+
+    When disabled, this still returns candidate rows for debug output while
+    keeping the raw TimTrack alpha unchanged.
+    """
+
+    raw_alpha = np.asarray(raw_alpha_deg, dtype=np.float64).reshape(-1)
+    n = min(len(geofeatures), len(raw_alpha))
+    selected = raw_alpha[:n].copy()
+    selected_idx = np.full(n, -1, dtype=np.int32)
+    raw_rejected = np.zeros(n, dtype=bool)
+    reasons = np.full(n, "raw TimTrack alpha kept", dtype=object)
+    candidate_rows: list[dict[str, Any]] = []
+    selection_rows: list[dict[str, Any]] = []
+
+    for frame in range(n):
+        entry = geofeatures[frame]
+        alphas, weights, x_lines, y_lines = _entry_candidate_arrays(entry)
+        finite_weight = np.isfinite(weights) & (weights > 0)
+        max_weight = float(np.nanmax(weights[finite_weight])) if np.any(finite_weight) else np.nan
+        valid = (
+            np.isfinite(alphas)
+            & (alphas >= float(config.angle_min_deg))
+            & (alphas <= float(config.angle_max_deg))
+        )
+
+        nearest_raw_idx = -1
+        if len(alphas) and np.isfinite(raw_alpha[frame]):
+            finite_alpha = np.isfinite(alphas)
+            if np.any(finite_alpha):
+                nearest_raw_idx = int(np.flatnonzero(finite_alpha)[np.nanargmin(np.abs(alphas[finite_alpha] - raw_alpha[frame]))])
+
+        if frame == 0 or not bool(config.enabled) or not np.isfinite(raw_alpha[frame]):
+            selected[frame] = raw_alpha[frame]
+            selected_idx[frame] = nearest_raw_idx
+            reasons[frame] = "candidate persistence disabled" if not bool(config.enabled) else "first frame"
+        else:
+            previous = selected[frame - 1]
+            raw_jump = abs(float(raw_alpha[frame] - previous)) if np.isfinite(previous) else 0.0
+            if raw_jump <= float(config.max_angle_step_deg) or not np.any(valid):
+                selected[frame] = raw_alpha[frame]
+                selected_idx[frame] = nearest_raw_idx
+                if not np.any(valid):
+                    reasons[frame] = "no valid candidate in configured angle range"
+                else:
+                    reasons[frame] = f"raw alpha jump {raw_jump:.2f}deg within limit"
+            else:
+                candidate_indices = np.flatnonzero(valid)
+                candidate_alphas = alphas[candidate_indices]
+                candidate_weights = weights[candidate_indices]
+                if np.isfinite(max_weight) and max_weight > 0:
+                    weight_norm = np.nan_to_num(candidate_weights / max_weight, nan=0.0)
+                else:
+                    weight_norm = np.zeros_like(candidate_alphas)
+                costs = np.abs(candidate_alphas - previous) - float(config.hough_weight_bonus_deg) * weight_norm
+                best_pos = int(np.nanargmin(costs))
+                best_idx = int(candidate_indices[best_pos])
+                best_alpha = float(alphas[best_idx])
+                best_jump = abs(best_alpha - previous)
+                if best_jump <= float(config.max_angle_step_deg):
+                    selected[frame] = best_alpha
+                    selected_idx[frame] = best_idx
+                    raw_rejected[frame] = abs(best_alpha - raw_alpha[frame]) > 1e-9
+                    reasons[frame] = (
+                        f"raw alpha jump {raw_jump:.2f}deg; selected candidate {best_alpha:.2f}deg "
+                        f"near previous {previous:.2f}deg"
+                    )
+                else:
+                    selected[frame] = raw_alpha[frame]
+                    selected_idx[frame] = nearest_raw_idx
+                    reasons[frame] = (
+                        f"raw alpha jump {raw_jump:.2f}deg; no candidate within "
+                        f"{config.max_angle_step_deg:.2f}deg of previous"
+                    )
+
+        selection_rows.append(
+            {
+                "Frame": int(frame),
+                "raw_alpha_deg": float(raw_alpha[frame]),
+                "selected_alpha_deg": float(selected[frame]),
+                "selected_candidate_idx": int(selected_idx[frame]),
+                "raw_alpha_rejected": bool(raw_rejected[frame]),
+                "reason": str(reasons[frame]),
+                "n_candidates": int(len(alphas)),
+                "angle_min_deg": float(config.angle_min_deg),
+                "angle_max_deg": float(config.angle_max_deg),
+                "max_angle_step_deg": float(config.max_angle_step_deg),
+            }
+        )
+
+        for cand_idx, (alpha, weight) in enumerate(zip(alphas, weights)):
+            is_selected = cand_idx == int(selected_idx[frame])
+            weight_norm = (
+                float(weight / max_weight)
+                if np.isfinite(weight) and np.isfinite(max_weight) and max_weight > 0
+                else np.nan
+            )
+            candidate_rows.append(
+                {
+                    "Frame": int(frame),
+                    "candidate_idx": int(cand_idx),
+                    "candidate_alpha_deg": float(alpha),
+                    "candidate_weight": float(weight),
+                    "candidate_weight_norm": weight_norm,
+                    "x1": float(x_lines[cand_idx, 0]) if cand_idx < len(x_lines) else np.nan,
+                    "y1": float(y_lines[cand_idx, 0]) if cand_idx < len(y_lines) else np.nan,
+                    "x2": float(x_lines[cand_idx, 1]) if cand_idx < len(x_lines) else np.nan,
+                    "y2": float(y_lines[cand_idx, 1]) if cand_idx < len(y_lines) else np.nan,
+                    "inside_configured_angle_range": bool(valid[cand_idx]) if cand_idx < len(valid) else False,
+                    "selected": bool(is_selected),
+                    "selection_reason": str(reasons[frame]) if is_selected else "not selected",
+                }
+            )
+
+    return {
+        "selected_alpha_deg": selected,
+        "selected_candidate_idx": selected_idx,
+        "raw_alpha_rejected": raw_rejected,
+        "selection_reason": reasons.astype(str),
+        "candidate_rows": candidate_rows,
+        "selection_rows": selection_rows,
+    }
+
+
+def _line_mid_angle(line_1b: np.ndarray) -> tuple[float, float]:
+    line = np.asarray(line_1b, dtype=np.float64).reshape(4)
+    dx = line[2] - line[0]
+    slope = (line[3] - line[1]) / dx if abs(dx) > 1e-12 else np.nan
+    angle = -float(np.rad2deg(np.arctan2(slope, 1.0))) if np.isfinite(slope) else np.nan
+    return float((line[1] + line[3]) / 2.0), angle
+
+
+def aponeurosis_gating_rows(apo_state: Mapping[str, np.ndarray], super_meas: np.ndarray, deep_meas: np.ndarray) -> list[dict[str, Any]]:
+    """Return per-frame aponeurosis gating diagnostics for CSV output."""
+
+    rows: list[dict[str, Any]] = []
+    n = min(len(apo_state["super_lines"]), len(super_meas), len(deep_meas))
+    prior_super = np.asarray(apo_state.get("prior_super_lines", apo_state["super_lines"]), dtype=np.float64)
+    prior_deep = np.asarray(apo_state.get("prior_deep_lines", apo_state["deep_lines"]), dtype=np.float64)
+    rejected = np.asarray(apo_state.get("line_rejected", np.zeros((n, 2), dtype=bool)), dtype=bool)
+    soft = np.asarray(apo_state.get("line_soft_downweighted", np.zeros((n, 2), dtype=bool)), dtype=bool)
+    r_scale = np.asarray(apo_state.get("gating_r_scale", np.ones((n, 4), dtype=np.float64)), dtype=np.float64)
+    reasons = np.asarray(apo_state.get("gating_reasons", np.full((n, 2), "", dtype=object)), dtype=object)
+    consecutive = np.asarray(apo_state.get("consecutive_rejections", np.zeros((n, 2), dtype=np.int32)), dtype=np.int32)
+
+    for frame in range(n):
+        sup_meas_mid, sup_meas_angle = _line_mid_angle(super_meas[frame])
+        deep_meas_mid, deep_meas_angle = _line_mid_angle(deep_meas[frame])
+        sup_filtered_mid, sup_filtered_angle = _line_mid_angle(apo_state["super_lines"][frame])
+        deep_filtered_mid, deep_filtered_angle = _line_mid_angle(apo_state["deep_lines"][frame])
+        sup_prior_mid, sup_prior_angle = _line_mid_angle(prior_super[frame])
+        deep_prior_mid, deep_prior_angle = _line_mid_angle(prior_deep[frame])
+        rows.append(
+            {
+                "Frame": int(frame),
+                "super_measurement_mid_y": sup_meas_mid,
+                "super_measurement_angle_deg": sup_meas_angle,
+                "super_prior_mid_y": sup_prior_mid,
+                "super_prior_angle_deg": sup_prior_angle,
+                "super_filtered_mid_y": sup_filtered_mid,
+                "super_filtered_angle_deg": sup_filtered_angle,
+                "super_line_rejected": bool(rejected[frame, 0]),
+                "super_line_soft_downweighted": bool(soft[frame, 0]),
+                "super_endpoint_r_scale_left": float(r_scale[frame, 0]),
+                "super_endpoint_r_scale_right": float(r_scale[frame, 1]),
+                "super_consecutive_rejections": int(consecutive[frame, 0]),
+                "super_reason": str(reasons[frame, 0]),
+                "deep_measurement_mid_y": deep_meas_mid,
+                "deep_measurement_angle_deg": deep_meas_angle,
+                "deep_prior_mid_y": deep_prior_mid,
+                "deep_prior_angle_deg": deep_prior_angle,
+                "deep_filtered_mid_y": deep_filtered_mid,
+                "deep_filtered_angle_deg": deep_filtered_angle,
+                "deep_line_rejected": bool(rejected[frame, 1]),
+                "deep_line_soft_downweighted": bool(soft[frame, 1]),
+                "deep_endpoint_r_scale_left": float(r_scale[frame, 2]),
+                "deep_endpoint_r_scale_right": float(r_scale[frame, 3]),
+                "deep_consecutive_rejections": int(consecutive[frame, 1]),
+                "deep_reason": str(reasons[frame, 1]),
+            }
+        )
+    return rows
+
+
+def confidence_debug_rows(confidence_arrays: Mapping[str, np.ndarray]) -> list[dict[str, Any]]:
+    """Return confidence/adaptive-R terms as CSV rows."""
+
+    if not confidence_arrays:
+        return []
+    n = len(next(iter(confidence_arrays.values())))
+    rows: list[dict[str, Any]] = []
+    for frame in range(n):
+        row: dict[str, Any] = {"Frame": int(frame)}
+        for key, values in confidence_arrays.items():
+            arr = np.asarray(values)
+            if arr.ndim != 1 or len(arr) <= frame:
+                continue
+            value = arr[frame]
+            row[key] = bool(value) if arr.dtype == np.dtype(bool) else float(value)
+        rows.append(row)
+    return rows
 
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -276,6 +608,8 @@ def draw_overlay_frame(
     rois: Mapping[str, roi.ROI],
     arrays: Mapping[str, np.ndarray],
     result_idx: int,
+    *,
+    show_kalman_comparison: bool = False,
 ) -> np.ndarray:
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame.copy()
     vis = cv2.cvtColor(roi.ensure_uint8_image(gray), cv2.COLOR_GRAY2BGR)
@@ -290,7 +624,11 @@ def draw_overlay_frame(
     draw_line_1b(vis, arrays["sup_apo_lines"][result_idx], (255, 0, 0), 2)
     draw_line_1b(vis, arrays["deep_apo_lines"][result_idx], (0, 255, 0), 2)
     draw_line_1b(vis, arrays["klt_prior_segments"][result_idx], (0, 165, 255), 1)
-    draw_line_1b(vis, arrays["fascicle_segments"][result_idx], (0, 0, 255), 3)
+    if show_kalman_comparison and "fixed_fascicle_segments" in arrays:
+        draw_line_1b(vis, arrays["fixed_fascicle_segments"][result_idx], (0, 0, 255), 5)
+        draw_line_1b(vis, arrays["fascicle_segments"][result_idx], (255, 0, 0), 3)
+    else:
+        draw_line_1b(vis, arrays["fascicle_segments"][result_idx], (0, 0, 255), 3)
 
     fl = arrays["FL_mm"][result_idx] if "FL_mm" in arrays else np.nan
     text_lines = [
@@ -303,6 +641,9 @@ def draw_overlay_frame(
         conf = float(arrays["combined_confidence"][result_idx])
         scale = float(arrays.get("r_scale", np.full_like(arrays["combined_confidence"], np.nan))[result_idx])
         text_lines.append(f"Conf: {conf:.2f}  R x{scale:.1f}")
+    if show_kalman_comparison and "fixed_fascicle_segments" in arrays:
+        text_lines.append("Normal Kalman: red")
+        text_lines.append("Adaptive Kalman: blue")
     ut.put_text_lines_on_image(
         vis,
         text_lines,
@@ -323,6 +664,8 @@ def save_annotated_video(
     rois: Mapping[str, roi.ROI],
     arrays: Mapping[str, np.ndarray],
     fps: float,
+    *,
+    show_kalman_comparison: bool = False,
 ) -> None:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -350,7 +693,13 @@ def save_annotated_video(
         ok, frame = cap.read()
         if not ok:
             continue
-        vis = draw_overlay_frame(frame, rois, arrays, result_idx)
+        vis = draw_overlay_frame(
+            frame,
+            rois,
+            arrays,
+            result_idx,
+            show_kalman_comparison=show_kalman_comparison,
+        )
         if vis.shape[:2] != (height, width):
             vis = cv2.resize(vis, (width, height))
         writer.write(vis)
@@ -398,18 +747,32 @@ def save_time_series_plot(path: Path, arrays: Mapping[str, np.ndarray]) -> None:
     if "FL_mm" in arrays:
         fl = np.asarray(arrays["FL_mm"], dtype=np.float64)
         fl_label = "FL (mm)"
+        fl_key = "FL_mm"
     else:
         fl = np.asarray(arrays["FL_px"], dtype=np.float64)
         fl_label = "FL (px)"
+        fl_key = "FL_px"
 
     path.parent.mkdir(parents=True, exist_ok=True)
     fig, axes = plt.subplots(3, 1, figsize=(11, 7), sharex=True)
-    for ax, values, label, color in [
-        (axes[0], ang, "ANG (deg)", "tab:red"),
-        (axes[1], pen, "PEN (deg)", "tab:blue"),
-        (axes[2], fl, fl_label, "tab:green"),
+    for ax, values, key, label, color in [
+        (axes[0], ang, "ANG_deg", "ANG (deg)", "tab:red"),
+        (axes[1], pen, "PEN_deg", "PEN (deg)", "tab:blue"),
+        (axes[2], fl, fl_key, fl_label, "tab:green"),
     ]:
-        ax.plot(time_s, values, color=color, linewidth=1.5)
+        fixed_key = f"fixed_{key}"
+        if fixed_key in arrays:
+            ax.plot(
+                time_s,
+                np.asarray(arrays[fixed_key], dtype=np.float64),
+                color="black",
+                linewidth=1.0,
+                label="normal Kalman",
+            )
+            ax.plot(time_s, values, color=color, linewidth=1.2, label="selected Kalman")
+            ax.legend(loc="best", fontsize=8)
+        else:
+            ax.plot(time_s, values, color=color, linewidth=1.5)
         ax.set_ylabel(label)
         ax.grid(True, alpha=0.25)
     axes[-1].set_xlabel("Time (s)")
@@ -417,6 +780,96 @@ def save_time_series_plot(path: Path, arrays: Mapping[str, np.ndarray]) -> None:
     fig.tight_layout()
     fig.savefig(path, dpi=160)
     plt.close(fig)
+
+
+def run_fascicle_kalman_mode(
+    mode: str,
+    klt_segments: np.ndarray,
+    timtrack_alpha: np.ndarray,
+    super_lines: np.ndarray,
+    deep_lines: np.ndarray,
+    kalman_config: MatlabTwoStateKalmanConfig,
+    *,
+    confidence_arrays: Mapping[str, np.ndarray] | None = None,
+    mm_per_pixel: float | None = None,
+) -> dict[str, np.ndarray]:
+    """Run the strict 2-state Kalman branch in fixed, scalar, or anisotropic mode."""
+
+    if mode not in KALMAN_MODES:
+        raise ValueError(f"Unsupported Kalman mode {mode!r}; expected one of {KALMAN_MODES}.")
+
+    confidence_arrays = confidence_arrays or {}
+    use_adaptive = kalman_mode_uses_confidence(mode)
+    if use_adaptive and "r_scale" not in confidence_arrays:
+        raise ValueError(f"{mode} requires confidence_arrays with an 'r_scale' entry.")
+
+    kalman_run_config = replace(kalman_config, use_adaptive_R=use_adaptive)
+    kwargs: dict[str, np.ndarray | None] = {}
+    if mode == "adaptive-scalar":
+        kwargs["measurement_r_scale"] = confidence_arrays.get("r_scale")
+    elif mode == "adaptive-anisotropic":
+        kwargs["measurement_r_scale"] = confidence_arrays.get("r_scale")
+        kwargs["measurement_r_scale_theta"] = confidence_arrays.get("r_scale_theta")
+        kwargs["measurement_r_scale_length"] = confidence_arrays.get("r_scale_length")
+
+    return run_matlab_2state_kalman(
+        klt_segments,
+        timtrack_alpha,
+        super_lines,
+        deep_lines,
+        config=kalman_run_config,
+        mm_per_pixel=mm_per_pixel,
+        **kwargs,
+    )
+
+
+def _finite_delta_stats(estimate: np.ndarray, reference: np.ndarray) -> dict[str, float | int]:
+    estimate_arr = np.asarray(estimate, dtype=np.float64).reshape(-1)
+    reference_arr = np.asarray(reference, dtype=np.float64).reshape(-1)
+    n = min(len(estimate_arr), len(reference_arr))
+    delta = estimate_arr[:n] - reference_arr[:n]
+    valid = np.isfinite(delta)
+    if not np.any(valid):
+        return {
+            "n_valid": 0,
+            "mean_delta": np.nan,
+            "mean_abs_delta": np.nan,
+            "median_abs_delta": np.nan,
+            "rmse_delta": np.nan,
+            "max_abs_delta": np.nan,
+        }
+    d = delta[valid]
+    abs_d = np.abs(d)
+    return {
+        "n_valid": int(len(d)),
+        "mean_delta": float(np.mean(d)),
+        "mean_abs_delta": float(np.mean(abs_d)),
+        "median_abs_delta": float(np.median(abs_d)),
+        "rmse_delta": float(np.sqrt(np.mean(d * d))),
+        "max_abs_delta": float(np.max(abs_d)),
+    }
+
+
+def kalman_comparison_rows(
+    selected: Mapping[str, np.ndarray],
+    fixed: Mapping[str, np.ndarray],
+) -> list[dict[str, float | int | str]]:
+    """Summarize selected Kalman outputs minus the normal fixed-R Kalman outputs."""
+
+    rows: list[dict[str, float | int | str]] = []
+    metric_specs = [
+        ("ANG", "ANG_deg", "deg"),
+        ("PEN", "PEN_deg", "deg"),
+        (
+            "FL",
+            "FL_mm" if "FL_mm" in selected and "FL_mm" in fixed else "FL_px",
+            "mm" if "FL_mm" in selected and "FL_mm" in fixed else "px",
+        ),
+    ]
+    for metric, key, unit in metric_specs:
+        stats = _finite_delta_stats(selected[key], fixed[key])
+        rows.append({"metric": metric, "key": key, "unit": unit, **stats})
+    return rows
 
 
 def _segment_length_px(segment: np.ndarray) -> float:
@@ -630,25 +1083,129 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Draw ROIs but do not update aponeurosis cuts or fascicle Emask from them.",
     )
+    parser.add_argument(
+        "--apo-maxangle",
+        type=float,
+        default=None,
+        help="Override both aponeurosis fit angle limits in degrees, e.g. 10 allows roughly -10..+10 deg.",
+    )
+    parser.add_argument(
+        "--super-apo-maxangle",
+        type=float,
+        default=None,
+        help="Override only the superficial aponeurosis fit angle limit in degrees.",
+    )
+    parser.add_argument(
+        "--deep-apo-maxangle",
+        type=float,
+        default=None,
+        help="Override only the deep aponeurosis fit angle limit in degrees.",
+    )
     parser.add_argument("--limit", type=int, default=None, help="Process only the first N frames.")
     parser.add_argument("--seed-frames", type=int, default=11, help="Frames used for autonomous seed selection.")
+    parser.add_argument("--fas-angle-min", type=float, default=None, help="Override minimum fascicle Hough/seed angle.")
+    parser.add_argument("--fas-angle-max", type=float, default=None, help="Override maximum fascicle Hough/seed angle.")
+    parser.add_argument(
+        "--candidate-persistence",
+        action="store_true",
+        help="Prefer fascicle candidates close to the previous selected alpha when raw alpha jumps abruptly.",
+    )
+    parser.add_argument(
+        "--max-angle-step",
+        type=float,
+        default=8.0,
+        help="Maximum preferred frame-to-frame fascicle alpha step for --candidate-persistence.",
+    )
+    parser.add_argument(
+        "--candidate-weight-bonus",
+        type=float,
+        default=2.0,
+        help="Hough-weight bonus, in degrees, used when ranking persistent fascicle candidates.",
+    )
+    parser.add_argument(
+        "--apo-gating",
+        action="store_true",
+        help="Enable separate anatomical gating for superficial/deep aponeurosis measurements.",
+    )
+    parser.add_argument("--apo-gate-mid-innovation-px", type=float, default=10.0)
+    parser.add_argument("--apo-gate-super-mid-jump-px", type=float, default=12.0)
+    parser.add_argument("--apo-gate-deep-mid-jump-px", type=float, default=6.0)
+    parser.add_argument("--apo-gate-angle-jump-deg", type=float, default=2.5)
+    parser.add_argument("--apo-gate-max-rejections", type=int, default=3)
+    parser.add_argument(
+        "--debug-detections",
+        action="store_true",
+        help="Save fascicle candidate, selection, aponeurosis rejection, and confidence debug CSVs.",
+    )
     parser.add_argument("--results-dir", type=Path, default=PROJECT_ROOT / "results" / "strict_ultratimtrack_runs")
     parser.add_argument("--annotated-video", type=Path, default=None, help="Output MP4 path.")
     parser.add_argument("--no-annotated-video", action="store_true", help="Do not write annotated MP4.")
     parser.add_argument("--save-overlays", type=int, default=3, help="Number of overlay PNGs to save.")
     parser.add_argument("--no-time-series-plot", action="store_true", help="Do not write ANG/PEN/FL time-series PNG.")
     parser.add_argument("--print-time-series", action="store_true", help="Print ANG/PEN/FL values for every processed frame.")
-    parser.add_argument("--adaptive-r", action="store_true", help="Use confidence-adaptive Kalman measurement covariance R_t.")
+    parser.add_argument(
+        "--kalman-mode",
+        choices=KALMAN_MODES,
+        default=None,
+        help=(
+            "Kalman measurement covariance mode: fixed normal Kalman, scalar adaptive R, "
+            "or anisotropic theta/length adaptive R. Defaults to fixed unless --adaptive-r is used."
+        ),
+    )
+    parser.add_argument(
+        "--adaptive-r",
+        action="store_true",
+        help="Backward-compatible alias for --kalman-mode adaptive-anisotropic.",
+    )
+    parser.add_argument(
+        "--compare-to-fixed-kalman",
+        "--compare-kalman",
+        dest="compare_to_fixed_kalman",
+        action="store_true",
+        help="Also run the normal fixed-R Kalman and save ANG/PEN/FL deltas for the selected mode.",
+    )
+    parser.add_argument(
+        "--annotate-kalman-comparison",
+        "--annotate-both-kalman",
+        dest="annotate_kalman_comparison",
+        action="store_true",
+        help="Draw normal fixed-R Kalman in red and selected adaptive Kalman in blue on the annotated video.",
+    )
     parser.add_argument(
         "--confidence-debug",
         action="store_true",
-        help="Compute confidence metrics but keep the Kalman filter on fixed R unless --adaptive-r is also set.",
+        help="Compute confidence metrics even when --kalman-mode fixed is selected.",
     )
     parser.add_argument("--save-confidence-plots", action="store_true", help="Write confidence/R-scale diagnostic PNG.")
     parser.add_argument("--mm-per-pixel", type=float, default=None, help="Override pixel scale.")
     parser.add_argument("--image-depth-mm", type=float, default=None, help="Image depth; used if --mm-per-pixel is absent.")
     parser.add_argument("--progress-every", type=int, default=250)
     args = parser.parse_args()
+    kalman_mode_from_cli = args.kalman_mode is not None or bool(args.adaptive_r)
+    annotate_comparison_from_cli = bool(args.annotate_kalman_comparison)
+    compare_from_cli = bool(args.compare_to_fixed_kalman or annotate_comparison_from_cli)
+    if args.fas_angle_min is not None and args.fas_angle_max is not None and args.fas_angle_min >= args.fas_angle_max:
+        parser.error("--fas-angle-min must be smaller than --fas-angle-max.")
+    if args.max_angle_step <= 0:
+        parser.error("--max-angle-step must be positive.")
+    if args.apo_gate_max_rejections < 0:
+        parser.error("--apo-gate-max-rejections must be non-negative.")
+
+    if args.kalman_mode is None:
+        args.kalman_mode = "adaptive-anisotropic" if args.adaptive_r else "fixed"
+    elif args.adaptive_r:
+        if args.kalman_mode == "fixed":
+            args.kalman_mode = "adaptive-anisotropic"
+        elif args.kalman_mode != "adaptive-anisotropic":
+            parser.error("--adaptive-r is an alias for --kalman-mode adaptive-anisotropic.")
+    args.adaptive_r = kalman_mode_uses_confidence(args.kalman_mode)
+    if args.annotate_kalman_comparison:
+        if not args.adaptive_r:
+            if kalman_mode_from_cli:
+                parser.error("--annotate-kalman-comparison requires an adaptive Kalman mode.")
+            args.kalman_mode = "adaptive-anisotropic"
+            args.adaptive_r = True
+        args.compare_to_fixed_kalman = True
 
     if args.video is None or args.interactive:
         args.video = prompt_video_from_raw(PROJECT_ROOT / "data" / "raw") if args.video is None else args.video
@@ -670,6 +1227,28 @@ def parse_args() -> argparse.Namespace:
             args.select_roi = True
             args.overwrite_roi = True
         args.no_annotated_video = not prompt_yes_no("Write annotated video?", default=True)
+        if not kalman_mode_from_cli:
+            args.kalman_mode = prompt_kalman_mode(default=args.kalman_mode)
+        args.adaptive_r = kalman_mode_uses_confidence(args.kalman_mode)
+        if args.annotate_kalman_comparison and not args.adaptive_r:
+            args.annotate_kalman_comparison = False
+            if not compare_from_cli:
+                args.compare_to_fixed_kalman = False
+        if args.adaptive_r and not compare_from_cli:
+            args.compare_to_fixed_kalman = prompt_yes_no(
+                "Compare adaptive Kalman to normal fixed-R Kalman?",
+                default=True,
+            )
+        if (
+            args.adaptive_r
+            and args.compare_to_fixed_kalman
+            and not args.no_annotated_video
+            and not annotate_comparison_from_cli
+        ):
+            args.annotate_kalman_comparison = prompt_yes_no(
+                "Draw normal and adaptive Kalman together on the annotated video?",
+                default=True,
+            )
 
     return args
 
@@ -695,6 +1274,22 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         )
         if not args.no_roi_parameter_update:
             parms = update_parms_from_rois(parms, rois, frame0.shape[:2])
+    parms = apply_aponeurosis_maxangle_overrides(
+        parms,
+        apo_maxangle=args.apo_maxangle,
+        super_apo_maxangle=args.super_apo_maxangle,
+        deep_apo_maxangle=args.deep_apo_maxangle,
+    )
+    parms = apply_fascicle_angle_overrides(
+        parms,
+        fas_angle_min=args.fas_angle_min,
+        fas_angle_max=args.fas_angle_max,
+    )
+    fas_range = np.asarray(parms.get("fas", {}).get("range", [5.0, 60.0]), dtype=np.float64).reshape(-1)
+    if fas_range.size < 2:
+        fas_range = np.asarray([5.0, 60.0], dtype=np.float64)
+    fas_angle_min = float(fas_range[0])
+    fas_angle_max = float(fas_range[1])
 
     if args.mm_per_pixel is not None:
         mm_per_px = float(args.mm_per_pixel)
@@ -743,7 +1338,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         entry = detect_timtrack_geofeature_from_image(gray, parms, emask_mode="matlab")
         entry["frame"] = idx
         seed_entries.append(entry)
-    seed_config = FascicleSeedScoringConfig(min_cluster_frame_coverage=min(8, seed_frame_count))
+    seed_config = replace(
+        FascicleSeedScoringConfig(min_cluster_frame_coverage=min(8, seed_frame_count)),
+        angle_min_deg=fas_angle_min,
+        angle_max_deg=fas_angle_max,
+    )
     candidates = extract_fascicle_seed_candidates(seed_entries, seed_frames, mm_per_px=mm_per_px, config=seed_config)
     candidates, clusters = cluster_seed_candidates(candidates, min_frame_coverage=seed_config.min_cluster_frame_coverage)
     selection = select_autonomous_fascicle_seed(candidates, clusters, seed_entries[0], frame0.shape[1])
@@ -771,6 +1370,16 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
 
     print("\nRunning aponeurosis state estimator...")
     sup_meas, deep_meas = geofeature_measurement_lines(geofeatures, frame0.shape[1])
+    apo_gating_config = AponeurosisGatingConfig(
+        enabled=bool(args.apo_gating),
+        mid_innovation_px=float(args.apo_gate_mid_innovation_px),
+        super_mid_jump_px=float(args.apo_gate_super_mid_jump_px),
+        deep_mid_jump_px=float(args.apo_gate_deep_mid_jump_px),
+        angle_jump_deg=float(args.apo_gate_angle_jump_deg),
+        max_consecutive_rejections=int(args.apo_gate_max_rejections),
+        super_maxangle_deg=float(parms["apo"]["super"].get("maxangle", np.nan)),
+        deep_maxangle_deg=float(parms["apo"]["deep"].get("maxangle", np.nan)),
+    )
     apo_state = run_matlab_aponeurosis_state_video(
         args.video,
         geofeatures,
@@ -781,13 +1390,26 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         q_parameter=float(mat_root.get("Q", 0.01)),
         measurement_variance=apo_measurement_variance,
         config=klt_config,
+        gating_config=apo_gating_config,
         limit=n,
         progress_every=args.progress_every,
     )
 
-    timtrack_alpha = geofeature_alpha(geofeatures)
+    timtrack_alpha_raw = geofeature_alpha(geofeatures)
+    fascicle_persistence = select_fascicle_candidate_persistence(
+        geofeatures,
+        timtrack_alpha_raw,
+        config=FascicleCandidatePersistenceConfig(
+            enabled=bool(args.candidate_persistence),
+            angle_min_deg=fas_angle_min,
+            angle_max_deg=fas_angle_max,
+            max_angle_step_deg=float(args.max_angle_step),
+            hough_weight_bonus_deg=float(args.candidate_weight_bonus),
+        ),
+    )
+    timtrack_alpha = np.asarray(fascicle_persistence["selected_alpha_deg"], dtype=np.float64)
     confidence_arrays: dict[str, np.ndarray] = {}
-    compute_confidence = bool(args.adaptive_r or args.confidence_debug or args.save_confidence_plots)
+    compute_confidence = bool(args.adaptive_r or args.confidence_debug or args.save_confidence_plots or args.debug_detections)
     if compute_confidence:
         print("\nComputing ultrasound confidence metrics...")
         confidence_frames = read_gray_frames(args.video, n)
@@ -800,19 +1422,35 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             config=SpeckleConfidenceConfig(),
             progress_every=args.progress_every if args.confidence_debug else None,
         )
-    kalman_run_config = replace(kalman_config, use_adaptive_R=bool(args.adaptive_r))
-    print("\nRunning 2-state fascicle Kalman...")
-    final = run_matlab_2state_kalman(
+    print(f"\nRunning 2-state fascicle Kalman ({args.kalman_mode})...")
+    mm_per_pixel_arg = mm_per_px if np.isfinite(mm_per_px) else None
+    super_lines_arr = np.asarray(apo_state["super_lines"], dtype=float)
+    deep_lines_arr = np.asarray(apo_state["deep_lines"], dtype=float)
+    final = run_fascicle_kalman_mode(
+        args.kalman_mode,
         fascicle_prior,
         timtrack_alpha,
-        np.asarray(apo_state["super_lines"], dtype=float),
-        np.asarray(apo_state["deep_lines"], dtype=float),
-        config=kalman_run_config,
-        mm_per_pixel=mm_per_px if np.isfinite(mm_per_px) else None,
-        measurement_r_scale=confidence_arrays.get("r_scale") if args.adaptive_r else None,
-        measurement_r_scale_theta=confidence_arrays.get("r_scale_theta") if args.adaptive_r else None,
-        measurement_r_scale_length=confidence_arrays.get("r_scale_length") if args.adaptive_r else None,
+        super_lines_arr,
+        deep_lines_arr,
+        kalman_config,
+        confidence_arrays=confidence_arrays,
+        mm_per_pixel=mm_per_pixel_arg,
     )
+
+    fixed_reference: dict[str, np.ndarray] | None = None
+    comparison_rows: list[dict[str, float | int | str]] = []
+    if args.compare_to_fixed_kalman:
+        print("Running normal fixed-R Kalman for comparison...")
+        fixed_reference = run_fascicle_kalman_mode(
+            "fixed",
+            fascicle_prior,
+            timtrack_alpha,
+            super_lines_arr,
+            deep_lines_arr,
+            kalman_config,
+            mm_per_pixel=mm_per_pixel_arg,
+        )
+        comparison_rows = kalman_comparison_rows(final, fixed_reference)
 
     frames = np.arange(len(final["ANG_deg"]), dtype=np.int32)
     arrays: dict[str, np.ndarray] = {
@@ -827,12 +1465,47 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "PEN_deg": np.asarray(final["PEN_deg"], dtype=np.float64),
         "FL_px": np.asarray(final["FL_px"], dtype=np.float64),
         "timtrack_alpha_deg": timtrack_alpha,
+        "raw_timtrack_alpha_deg": timtrack_alpha_raw,
+        "fascicle_candidate_selected_idx": np.asarray(
+            fascicle_persistence["selected_candidate_idx"],
+            dtype=np.int32,
+        ),
+        "fascicle_candidate_raw_rejected": np.asarray(
+            fascicle_persistence["raw_alpha_rejected"],
+            dtype=bool,
+        ),
+        "fascicle_candidate_selection_reason": np.asarray(
+            fascicle_persistence["selection_reason"],
+            dtype=str,
+        ),
         "selected_seed_segment": selected_seed,
         "selected_seed_alpha_deg": np.asarray(selected_alpha, dtype=np.float64),
         "mm_per_pixel": np.asarray(mm_per_px, dtype=np.float64),
+        "apo_measurement_states": np.asarray(apo_state["measurement_states"], dtype=np.float64),
+        "apo_accepted_measurement_states": np.asarray(apo_state["accepted_measurement_states"], dtype=np.float64),
+        "apo_gating_r_scale": np.asarray(apo_state["gating_r_scale"], dtype=np.float64),
+        "apo_rejected_endpoints": np.asarray(apo_state["rejected_endpoints"], dtype=bool),
+        "apo_soft_downweighted_endpoints": np.asarray(apo_state["soft_downweighted_endpoints"], dtype=bool),
+        "apo_line_rejected": np.asarray(apo_state["line_rejected"], dtype=bool),
+        "apo_line_soft_downweighted": np.asarray(apo_state["line_soft_downweighted"], dtype=bool),
+        "apo_gating_reasons": np.asarray(apo_state["gating_reasons"], dtype=str),
+        "apo_consecutive_rejections": np.asarray(apo_state["consecutive_rejections"], dtype=np.int32),
     }
     if "FL_mm" in final:
         arrays["FL_mm"] = np.asarray(final["FL_mm"], dtype=np.float64)
+    if fixed_reference is not None:
+        arrays["fixed_fascicle_segments"] = np.asarray(fixed_reference["fascicle_segments"], dtype=np.float64)
+        arrays["fixed_fascicle_end_segments"] = np.asarray(
+            fixed_reference["fascicle_end_segments"],
+            dtype=np.float64,
+        )
+        for key in ["ANG_deg", "PEN_deg", "FL_px", "FL_mm"]:
+            if key not in final or key not in fixed_reference:
+                continue
+            fixed_key = f"fixed_{key}"
+            delta_key = f"delta_vs_fixed_{key}"
+            arrays[fixed_key] = np.asarray(fixed_reference[key], dtype=np.float64)
+            arrays[delta_key] = np.asarray(final[key], dtype=np.float64) - arrays[fixed_key]
     if confidence_arrays:
         arrays.update(confidence_arrays)
     if "measurement_R_diag" in final:
@@ -889,6 +1562,14 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "kalman_measurement_r_scale_theta",
         "kalman_measurement_r_scale_length",
         "detection_success",
+        "fixed_ANG_deg",
+        "fixed_PEN_deg",
+        "fixed_FL_px",
+        "fixed_FL_mm",
+        "delta_vs_fixed_ANG_deg",
+        "delta_vs_fixed_PEN_deg",
+        "delta_vs_fixed_FL_px",
+        "delta_vs_fixed_FL_mm",
     ]
     for idx in range(len(frames)):
         row = {
@@ -899,6 +1580,16 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             "ANG": float(arrays["ANG_deg"][idx]),
             "FL_px": float(arrays["FL_px"][idx]),
             "TimTrackAlpha": float(timtrack_alpha[idx]),
+            "RawTimTrackAlpha": float(timtrack_alpha_raw[idx]),
+            "FascicleCandidateIdx": int(arrays["fascicle_candidate_selected_idx"][idx]),
+            "FascicleRawRejected": bool(arrays["fascicle_candidate_raw_rejected"][idx]),
+            "FascicleSelectionReason": str(arrays["fascicle_candidate_selection_reason"][idx]),
+            "SuperApoRejected": bool(arrays["apo_line_rejected"][idx, 0]),
+            "DeepApoRejected": bool(arrays["apo_line_rejected"][idx, 1]),
+            "SuperApoSoftDownweighted": bool(arrays["apo_line_soft_downweighted"][idx, 0]),
+            "DeepApoSoftDownweighted": bool(arrays["apo_line_soft_downweighted"][idx, 1]),
+            "SuperApoGateReason": str(arrays["apo_gating_reasons"][idx, 0]),
+            "DeepApoGateReason": str(arrays["apo_gating_reasons"][idx, 1]),
         }
         for column in confidence_csv_columns:
             if column not in arrays:
@@ -911,6 +1602,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     if args.print_time_series:
         print_time_series_rows(rows)
 
+    comparison_csv_path: Optional[Path] = None
+    if comparison_rows:
+        comparison_csv_path = run_dir / f"{args.name}_kalman_comparison_vs_fixed.csv"
+        write_csv(comparison_csv_path, comparison_rows)
+
     time_series_plot_path: Optional[Path] = None
     if not args.no_time_series_plot:
         time_series_plot_path = run_dir / f"{args.name}_ANG_PEN_FL_over_time.png"
@@ -920,13 +1616,65 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         confidence_plot_path = run_dir / f"{args.name}_confidence_diagnostics.png"
         save_confidence_plot(confidence_plot_path, arrays)
 
+    debug_paths: dict[str, Path] = {}
+    if args.debug_detections:
+        debug_dir = run_dir / "debug"
+        debug_specs = [
+            (
+                "fascicle_candidates",
+                debug_dir / f"{args.name}_fascicle_candidate_lines.csv",
+                list(fascicle_persistence["candidate_rows"]),
+            ),
+            (
+                "fascicle_selection",
+                debug_dir / f"{args.name}_fascicle_candidate_selection.csv",
+                list(fascicle_persistence["selection_rows"]),
+            ),
+            (
+                "aponeurosis_gating",
+                debug_dir / f"{args.name}_aponeurosis_gating.csv",
+                aponeurosis_gating_rows(apo_state, sup_meas, deep_meas),
+            ),
+            (
+                "confidence_terms",
+                debug_dir / f"{args.name}_confidence_terms.csv",
+                confidence_debug_rows(confidence_arrays),
+            ),
+        ]
+        for label, path, debug_rows in debug_specs:
+            if not debug_rows:
+                continue
+            write_csv(path, debug_rows)
+            debug_paths[label] = path
+
     metadata = {
         "video": str(args.video),
         "utt_export": str(args.utt_export),
         "roi_path": str(args.roi_path) if args.roi_path else None,
         "roi_parameter_update": not args.no_roi_parameter_update,
+        "apo_fit_maxangle_super_deg": float(parms["apo"]["super"].get("maxangle", np.nan)),
+        "apo_fit_maxangle_deep_deg": float(parms["apo"]["deep"].get("maxangle", np.nan)),
+        "fas_angle_min_deg": fas_angle_min,
+        "fas_angle_max_deg": fas_angle_max,
+        "seed_angle_min_deg": float(seed_config.angle_min_deg),
+        "seed_angle_max_deg": float(seed_config.angle_max_deg),
+        "candidate_persistence": bool(args.candidate_persistence),
+        "max_angle_step_deg": float(args.max_angle_step),
+        "candidate_weight_bonus_deg": float(args.candidate_weight_bonus),
+        "apo_gating": bool(args.apo_gating),
+        "apo_gate_mid_innovation_px": float(args.apo_gate_mid_innovation_px),
+        "apo_gate_super_mid_jump_px": float(args.apo_gate_super_mid_jump_px),
+        "apo_gate_deep_mid_jump_px": float(args.apo_gate_deep_mid_jump_px),
+        "apo_gate_angle_jump_deg": float(args.apo_gate_angle_jump_deg),
+        "apo_gate_max_rejections": int(args.apo_gate_max_rejections),
+        "kalman_mode": args.kalman_mode,
         "adaptive_r": bool(args.adaptive_r),
+        "compare_to_fixed_kalman": bool(args.compare_to_fixed_kalman),
+        "annotate_kalman_comparison": bool(args.annotate_kalman_comparison),
+        "kalman_comparison_csv": str(comparison_csv_path) if comparison_csv_path else None,
         "confidence_debug": bool(args.confidence_debug),
+        "debug_detections": bool(args.debug_detections),
+        "debug_csvs": {key: str(path) for key, path in debug_paths.items()},
         "frames": int(len(frames)),
         "fps": fps,
         "mm_per_pixel": mm_per_px,
@@ -942,16 +1690,27 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     annotated_path: Optional[Path] = None
     if not args.no_annotated_video:
         annotated_path = args.annotated_video or (run_dir / f"{args.name}_strict_annotated.mp4")
-        save_annotated_video(args.video, annotated_path, rois, arrays, fps)
+        save_annotated_video(
+            args.video,
+            annotated_path,
+            rois,
+            arrays,
+            fps,
+            show_kalman_comparison=bool(args.annotate_kalman_comparison),
+        )
 
     print("\nDone.")
     print(f"CSV: {csv_path}")
     print(f"NPZ: {npz_path}")
     print(f"Metadata: {metadata_path}")
+    if comparison_csv_path:
+        print(f"Kalman comparison: {comparison_csv_path}")
     if time_series_plot_path:
         print(f"ANG/PEN/FL plot: {time_series_plot_path}")
     if confidence_plot_path:
         print(f"Confidence plot: {confidence_plot_path}")
+    for label, path in debug_paths.items():
+        print(f"Debug {label}: {path}")
     if annotated_path:
         print(f"Annotated video: {annotated_path}")
     for path in overlay_paths:
@@ -961,9 +1720,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "csv": csv_path,
         "npz": npz_path,
         "metadata": metadata_path,
+        "kalman_comparison": comparison_csv_path,
         "time_series_plot": time_series_plot_path,
         "confidence_plot": confidence_plot_path,
         "annotated_video": annotated_path,
+        "debug_dir": run_dir / "debug" if debug_paths else None,
     }
 
 
