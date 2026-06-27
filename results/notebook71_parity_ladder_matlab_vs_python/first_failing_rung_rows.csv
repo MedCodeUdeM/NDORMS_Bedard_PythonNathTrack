@@ -1,0 +1,9 @@
+rung_index,rung,variable,unit,diagnostic_tolerance,reference_source,python_source,n,bias,mae,rmse,max_abs,corr,within_tolerance
+2,TimTrack geofeature measurement,fascicle alpha selected,deg,0.25,Fdat.geofeatures.alpha,Python timtrack_alpha_deg,2666,1.4533008252063015,1.6284696174043511,2.920087837419375,14.5,0.8849613630759807,False
+2,TimTrack geofeature measurement,fascicle alpha raw,deg,0.25,Fdat.geofeatures.alpha,Python raw_timtrack_alpha_deg,2666,1.40847711927982,1.6189047261815455,2.8993493333227645,14.5,0.8848513086938369,False
+2,TimTrack geofeature measurement,super_y1,px,0.5,Fdat.geofeatures.super_y1,"Python apo_measurement_states[:, 0]",2666,1.420847761775969,1.9516642786654392,2.7812707970448285,14.509857483463481,0.6922688898110632,False
+2,TimTrack geofeature measurement,muscle thickness,px,1.0,Fdat.geofeatures.thickness,Python measurement-line thickness,2666,-0.8521980122724058,1.9150131885443011,2.6071453239878486,13.420311301184142,0.9092118592777094,False
+2,TimTrack geofeature measurement,deep_y1,px,0.5,Fdat.geofeatures.deep_y1,"Python apo_measurement_states[:, 2]",2666,0.7997285863250143,1.1843417194019927,1.8044960131733463,6.89267208131281,0.9572278923723669,False
+2,TimTrack geofeature measurement,super_y2,px,0.5,Fdat.geofeatures.super_y2,"Python apo_measurement_states[:, 1]",2666,1.014233305788211,1.2953187712182244,1.7318875663889477,8.33891896178735,0.7975562630661763,False
+2,TimTrack geofeature measurement,deep_y2,px,0.5,Fdat.geofeatures.deep_y2,"Python apo_measurement_states[:, 3]",2666,-0.1990504376724465,0.6189194214293915,0.9115666266117335,4.248019323775679,0.9945301167838039,False
+2,TimTrack geofeature measurement,super angle betha,deg,0.25,Fdat.geofeatures.betha,angle(Python apo_measurement_states super),2666,0.03301402903377216,0.17999901766868573,0.29809791962607096,1.486434639229767,0.7342188089362784,False

@@ -22,7 +22,7 @@ from typing import Any, Mapping, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
-from scipy.ndimage import binary_fill_holes, rotate as scipy_rotate
+from scipy.ndimage import binary_fill_holes, rotate as scipy_rotate, uniform_filter
 
 from .timtrack_hough import hough_peaks, matlab_hough_accumulator
 
@@ -38,7 +38,7 @@ class MatlabHoughAponeurosisConfig:
     super_cut: CutRange = (0.0, 0.5)
     deep_cut: CutRange = (0.5, 1.0)
     threshold_sensitivity: float = 0.5
-    threshold_block_size: int = 71
+    threshold_block_size: int | tuple[int, ...] | None = None
     threshold_method: str = "mean"
     threshold_c: float = 0.0
     hough_theta_step_deg: float = 1.0
@@ -80,7 +80,11 @@ def matlab_round_positive(x: np.ndarray | float) -> np.ndarray:
 
 
 def normalize_to_uint8_for_threshold(image: np.ndarray) -> np.ndarray:
-    """Normalize an image to uint8 before applying OpenCV adaptive thresholding."""
+    """Normalize an image to uint8 before applying OpenCV adaptive thresholding.
+
+    Kept for older calibration notebooks. The production MATLAB compatibility
+    path below now ports MATLAB ``adaptthresh``/``imbinarize`` directly.
+    """
 
     arr = np.asarray(image, dtype=np.float32)
     mn = float(np.nanmin(arr))
@@ -90,48 +94,119 @@ def normalize_to_uint8_for_threshold(image: np.ndarray) -> np.ndarray:
     return np.clip((arr - mn) / (mx - mn) * 255.0, 0, 255).astype(np.uint8)
 
 
+def _matlab_adaptthresh_neighborhood(shape: tuple[int, ...]) -> tuple[int, ...]:
+    """Return MATLAB ``adaptthresh`` default neighborhood for an image shape."""
+
+    return tuple((2 * np.floor(np.asarray(shape, dtype=np.float64) / 16.0) + 1).astype(int))
+
+
+def _coerce_neighborhood_size(
+    block_size: int | tuple[int, ...] | None,
+    shape: tuple[int, ...],
+) -> tuple[int, ...]:
+    if block_size is None:
+        return _matlab_adaptthresh_neighborhood(shape)
+    if np.isscalar(block_size):
+        values = np.repeat(int(block_size), len(shape))
+    else:
+        values = np.asarray(block_size, dtype=int).reshape(-1)
+        if values.size == 1:
+            values = np.repeat(int(values[0]), len(shape))
+        if values.size != len(shape):
+            raise ValueError("block_size must be scalar or match image dimensionality.")
+    values = values.copy()
+    values[values < 1] = 1
+    values[values % 2 == 0] += 1
+    return tuple(int(v) for v in values)
+
+
+def _im2double_matlab_like(image: np.ndarray) -> np.ndarray:
+    """Subset of MATLAB ``im2double`` behavior needed by ``adaptthresh``."""
+
+    arr = np.asarray(image)
+    if arr.dtype == np.uint8:
+        return arr.astype(np.float64) / 255.0
+    if arr.dtype == np.uint16:
+        return arr.astype(np.float64) / 65535.0
+    if arr.dtype == np.uint32:
+        return arr.astype(np.float64) / 4294967295.0
+    if arr.dtype == np.int8:
+        return (arr.astype(np.float64) + 128.0) / 255.0
+    if arr.dtype == np.int16:
+        return (arr.astype(np.float64) + 32768.0) / 65535.0
+    if arr.dtype == np.int32:
+        return (arr.astype(np.float64) + 2147483648.0) / 4294967295.0
+    return arr.astype(np.float64, copy=False)
+
+
+def _class_range_matlab_like(image: np.ndarray) -> tuple[float, float]:
+    arr = np.asarray(image)
+    if arr.dtype == np.uint8:
+        return 0.0, 255.0
+    if arr.dtype == np.uint16:
+        return 0.0, 65535.0
+    if arr.dtype == np.uint32:
+        return 0.0, 4294967295.0
+    if arr.dtype == np.int8:
+        return -128.0, 127.0
+    if arr.dtype == np.int16:
+        return -32768.0, 32767.0
+    if arr.dtype == np.int32:
+        return -2147483648.0, 2147483647.0
+    return 0.0, 1.0
+
+
+def _adaptthresh_scale_factor(sensitivity: float, foreground_polarity: str) -> float:
+    sens = float(sensitivity)
+    if not 0.0 <= sens <= 1.0:
+        raise ValueError("sensitivity must be in [0, 1].")
+    polarity = foreground_polarity.lower()
+    if polarity == "bright":
+        return 0.6 + (1.0 - sens)
+    if polarity == "dark":
+        return 0.4 + sens
+    raise ValueError("foreground_polarity must be 'bright' or 'dark'.")
+
+
 def adaptive_threshold_matlab_style(
     image: np.ndarray,
     *,
     sensitivity: float = 0.5,
-    block_size: int = 71,
+    block_size: int | tuple[int, ...] | None = None,
     method: str = "mean",
     c: float = 0.0,
+    foreground_polarity: str = "bright",
 ) -> np.ndarray:
     """
-    Adaptive threshold used by the Notebook 38 compatibility path.
+    Port MATLAB ``imbinarize(I,'adaptive','Sensitivity',s)`` for mean statistic.
 
-    Notebook 37 found that OpenCV adaptive mean, ``block_size=71``, ``C=0`` was
-    the closest available rule to the exported MATLAB masks for this dataset.
-    The ``sensitivity`` argument is retained for API symmetry with MATLAB's
-    ``imbinarize(..., 'adaptive', 'sensitivity', ...)`` but is not mapped when
-    ``c`` is provided explicitly.
+    MATLAB first computes ``adaptthresh`` on ``im2double(I)`` with the default
+    neighborhood ``2*floor(size(I)/16)+1`` when no neighborhood is supplied.
+    Integer images are then compared against the threshold scaled back to the
+    native class range, while floating point images are compared directly.
     """
+    del c
 
-    del sensitivity
-
-    if block_size % 2 == 0:
-        block_size += 1
-    if block_size < 3:
-        block_size = 3
+    arr = np.asarray(image)
+    if arr.ndim not in {2, 3}:
+        raise ValueError("image must be a 2D image or 3D volume.")
 
     method_key = method.lower()
-    if method_key == "mean":
-        adaptive_method = cv2.ADAPTIVE_THRESH_MEAN_C
-    elif method_key == "gaussian":
-        adaptive_method = cv2.ADAPTIVE_THRESH_GAUSSIAN_C
-    else:
-        raise ValueError("method must be 'mean' or 'gaussian'.")
+    if method_key != "mean":
+        raise NotImplementedError("Only MATLAB adaptthresh Statistic='mean' is ported.")
 
-    out = cv2.adaptiveThreshold(
-        normalize_to_uint8_for_threshold(image),
-        255,
-        adaptive_method,
-        cv2.THRESH_BINARY,
-        int(block_size),
-        float(c),
-    )
-    return out > 0
+    nhood = _coerce_neighborhood_size(block_size, arr.shape)
+    scale_factor = _adaptthresh_scale_factor(float(sensitivity), foreground_polarity)
+    image_double = _im2double_matlab_like(arr)
+    local_mean = uniform_filter(image_double, size=nhood, mode="nearest")
+    threshold = np.clip(scale_factor * local_mean, 0.0, 1.0)
+
+    polarity = foreground_polarity.lower()
+    if np.issubdtype(arr.dtype, np.integer):
+        low, high = _class_range_matlab_like(arr)
+        threshold_native = low + (high - low) * threshold
+        return arr > threshold_native if polarity == "bright" else arr < threshold_native
+    return arr > threshold if polarity == "bright" else arr < threshold
 
 
 def zero_outside_vertical_cut(mask: np.ndarray, cut: CutRange) -> np.ndarray:
@@ -228,7 +303,7 @@ def get_aponeurosis_line_hough_matlab_like(
     if len(horizontal_cols):
         hmat[:, horizontal_cols[0]] = hmat_rot[:, 0]
 
-    peaks = hough_peaks(hmat, 1, threshold=0.0)
+    peaks = hough_peaks(hmat, 1, threshold=0.0, theta_degrees=theta)
     if len(peaks) == 0:
         return np.full_like(apox_1b, np.nan), {
             "theta": np.nan,

@@ -1,0 +1,8 @@
+rung_index,rung,n_variables,n_within_tolerance,max_rmse,median_rmse,max_abs_error,all_within_tolerance
+0,MATLAB variable alias check,3,3,0.0,0.0,0.0,True
+1,Frame/time alignment,1,1,1.5301109495801137e-05,1.5301109495801137e-05,2.6494845641877873e-05,True
+2,TimTrack geofeature measurement,9,1,2.920087837419375,1.8044960131733463,14.509857483463481,False
+3,Aponeurosis state/filter output,6,2,1.845592584430089,0.9104499971500992,6.732463683010394,False
+4,KLT / fascicle prior,6,0,38.4949623049278,9.909090050720296,81.53930374643272,False
+5,Fascicle Kalman state/output geometry,11,0,52.44992730426524,21.385710986055873,97.73540585885385,False
+6,Final output variables,3,0,2.8670338416244565,1.5992462684182553,6.282391408096636,False
