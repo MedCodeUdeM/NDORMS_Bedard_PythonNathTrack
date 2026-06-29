@@ -1,0 +1,4 @@
+comparison,n,bias,mae,rmse,corr,unit,target_rmse,passes
+saved_peak_stream_rebuild,2666,0.0,0.0,0.0,0.9999999999999999,deg,1e-09,True
+saved_peak_arrays_rebuild,2666,0.0,0.0,0.0,0.9999999999999999,deg,1e-09,True
+raw_python_timtrack_alpha,2666,-4.345273818454614,4.6734808702175545,6.201488399133804,0.5684551016812569,deg,1.0,False

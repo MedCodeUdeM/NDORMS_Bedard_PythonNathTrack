@@ -1,0 +1,12 @@
+field,present_in_matlab_export,shape,first_value_preview
+X_plus,True,"(2666,)",[733.          18.52048864]
+X_minus,True,"(2666,)",[733.          18.52048864]
+fas_p,True,"(2666,)",[0 1]
+fas_p_minus,True,"(2666,)",[0 0]
+A,True,"(2665,)",1
+K,True,"(2666,)",0.0
+alpha,True,"(2666,)",18.52048863720337
+fas_x,True,"(2666,)",[-27. 733.]
+fas_y,True,"(2666,)",[309.01343161  54.41875512]
+fas_x_original,True,"(2666,)",[-27 733]
+fas_y_original,True,"(2666,)",[309.01343161  54.41875512]

@@ -1,0 +1,5 @@
+variant,description,FL_rmse_mm,PEN_rmse_deg,ANG_rmse_deg,state_x_rmse_px,state_alpha_rmse_deg,passes_final_gate,passes_state_gate
+oracle_matlab_inputs,MATLAB raw KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,0.5603162940100396,0.26566580622257935,0.26566580622257935,4.034723120353034,0.3516438090948274,True,False
+python_one_step_klt,Notebook45 one-step Python KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,0.7529551324064312,0.409723832187515,0.40972383218751485,4.182721795937779,0.49645054015842477,True,False
+python_sequential_klt,Notebook44 sequential Python KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,6.868819502554928,3.292757937521781,3.2927579375217806,9.262139081243408,3.272789521983345,False,False
+python_sequential_klt_python_timtrack,Notebook44 sequential Python KLT + Python TimTrack alpha + MATLAB aponeuroses,11.208491029219624,5.429017109199198,5.429017109199199,9.262139081243408,5.479535723360696,False,False

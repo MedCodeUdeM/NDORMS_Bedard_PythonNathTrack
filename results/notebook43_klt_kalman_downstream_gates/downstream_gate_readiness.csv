@@ -1,0 +1,4 @@
+gate,reference,artifact,passes,next_action
+TimTrack mask/doHough,NB36 raw MATLAB export + NB42 parity metrics,results/notebook42_timtrack_full_pipeline_gate/parity_metrics.csv,True,Use as upstream measurement input for downstream gates.
+UltraTrack/KLT,MATLAB Region.Fascicle.fas_x_original / fas_y_original,results/notebook43_klt_kalman_downstream_gates/klt_gate_metrics.csv,False,Port MATLAB-like KLT and affine propagation; save pre-Kalman geometry for validation.
+MATLAB 2-state Kalman,MATLAB Region final outputs and Fascicle X_plus/X_minus/fas_p/fas_p_minus/A,results/notebook43_klt_kalman_downstream_gates/kalman_gate_metrics.csv,False,"Implement separate 2-state model [superficial x, alpha] plus RTS smoother; keep current 4-state filter separate."

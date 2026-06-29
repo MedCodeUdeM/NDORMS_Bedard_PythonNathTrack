@@ -1,0 +1,6 @@
+frame,mat_source,mat_mask_source,mat_mask_available,mat_alpha_saved,mat_alpha_recomputed_weighted_median,py_alpha,py_alpha_recomputed_weighted_median,mat_top_peak_alpha,mat_top_peak_weight,py_top_peak_alpha,py_top_peak_weight,abs_alpha_diff
+2533,current Fdat.geofeatures,none,False,39.5,39.5,19.5,19.5,34.0,265.0,10.0,297.0,20.0
+1722,current Fdat.geofeatures,none,False,33.5,33.5,14.0,14.0,33.5,285.0,10.0,319.0,19.5
+691,current Fdat.geofeatures,Notebook36 mask export,True,34.0,34.0,15.5,15.5,32.0,280.0,13.0,287.0,18.5
+0,current Fdat.geofeatures,Notebook36 mask export,True,18.5,18.5,18.5,18.5,19.0,367.0,19.0,314.0,0.0
+1066,current Fdat.geofeatures,Notebook36 mask export,True,20.5,20.5,20.5,20.5,20.5,312.0,19.5,313.0,0.0

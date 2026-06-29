@@ -1,0 +1,7 @@
+area,matlab_contract,current_python,status
+Feature detector,"detectMinEigenFeatures(FilterSize=11, MinQuality=0.005)","cv2.goodFeaturesToTrack(maxCorners=50, qualityLevel=0.3, minDistance=7, blockSize=7)",mismatch
+Fascicle feature count,selectStrongest(300) for Hough ROI,maxCorners defaults to 50,mismatch
+Point tracker,"vision.PointTracker NumPyramidLevels=4, MaxIterations=50, MaxBidirectionalError=inf, BlockSize=[21, 71]","cv2.calcOpticalFlowPyrLK winSize=(15,15), maxLevel=3, criteria=(30, 0.01)",mismatch
+Geometry propagation,"estimateGeometricTransform2D(..., affine, MaxDistance=50); transform fascicle endpoints",existing artifact stores already-derived segments; no MATLAB affine parity checkpoint yet,missing parity checkpoint
+Aponeurosis propagation,separate aponeurosis affine transform and ROI propagation,not yet validated against MATLAB awarp/sup/deep propagation,missing parity checkpoint
+Reinitialization,re-detect fascicle points below 100; re-detect aponeurosis points below 500,re-detects only if fewer than 10 tracked points in simple KLT wrapper,mismatch

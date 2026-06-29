@@ -1,0 +1,3 @@
+variant,description,FL_rmse_mm,PEN_rmse_deg,ANG_rmse_deg,passes_final_gate
+image_alpha_py_masks_matlab_klt_prior_matlab_apo,image-derived TimTrack alpha + Python-geofeature KLT masks + MATLAB raw KLT prior + MATLAB aponeuroses,1.0430768508744328,0.5094966221206031,0.5094966221206031,True
+strict_image_timtrack_prior_python_apo,image-derived TimTrack alpha + Python-geofeature KLT masks + Python TimTrack prior + Python aponeuroses,3.965089363367776,2.0603763553792382,2.0676036175316597,False

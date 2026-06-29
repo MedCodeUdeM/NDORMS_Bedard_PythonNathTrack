@@ -1,0 +1,21 @@
+{
+  "notebook": "52_correct_video_fixed_emask_timtrack_gate.ipynb",
+  "uses_saved_matlab_geofeatures_for_timtrack_or_klt_masks": false,
+  "source_video": "/Users/grosbedou/PycharmProjects/NDORMS/data/raw/UltraTimTrack_test.mp4",
+  "matlab_source_video": "/Users/grosbedou/Documents/GitHub/UltraTimTrack/slow_low_01_DOWN.mp4",
+  "emask_mode": "matlab_parms_fas_Emask",
+  "compares_timtrack_to_saved_full_sequence_fdat_geofeatures": true,
+  "image_timtrack_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook52_correct_video_fixed_emask_timtrack_gate/image_derived_timtrack_geofeatures_arrays.npz",
+  "klt_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook52_correct_video_fixed_emask_timtrack_gate/python_geofeature_mask_one_step_klt_arrays.npz",
+  "gate_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook52_correct_video_fixed_emask_timtrack_gate/image_timtrack_py_masks_matlab_klt_2state_final_arrays.npz",
+  "strict_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook52_correct_video_fixed_emask_timtrack_gate/strict_image_timtrack_prior_2state_final_arrays.npz",
+  "parity_metrics_csv": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook52_correct_video_fixed_emask_timtrack_gate/parity_metrics.csv",
+  "image_alpha_rmse_deg": 2.0101486697303272,
+  "timtrack_gate_passes": false,
+  "klt_angle_rmse_deg": 0.017998915205369514,
+  "klt_length_rmse_mm": 0.035372603619862324,
+  "gate_final_passes": true,
+  "strict_final_passes": false,
+  "main_gate_description": "image-derived TimTrack alpha + Python-geofeature KLT masks + MATLAB raw KLT prior + MATLAB aponeuroses",
+  "strict_variant_description": "image-derived TimTrack alpha + Python-geofeature KLT masks + Python TimTrack prior + Python aponeuroses"
+}

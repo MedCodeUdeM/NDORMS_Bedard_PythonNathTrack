@@ -1,0 +1,6 @@
+gate,status,ready_for_next
+TimTrack mask/doHough,passed on corrected 9-frame gate; full Python alpha still needs downstream validation,True
+KLT local one-step prior,good enough for 2-state Kalman gate,True
+KLT sequential raw prior,not passed; current sequential prior fails 2-state final gate,False
+MATLAB fascicle 2-state Kalman,ported and passes oracle final-output gate,True
+Current Python end-to-end scaffold,not ready; KLT sequential and full Python alpha still fail final gate,False

@@ -3,8 +3,9 @@ MATLAB-style TimTrack Hough helpers.
 
 This module ports the small pieces used by UltraTimTrack's TimTrack path:
 ``weightedMedian.m``, ``dohough.m``, and the helper ``hough_bin_pixels.m``.
-The goal is numerical compatibility for validation notebooks, not a replacement
-for the older OpenCV probabilistic Hough detector.
+The helpers are intentionally small so validation notebooks can compare the
+MATLAB-style weighted-median angle estimator against the older OpenCV
+probabilistic Hough detector.
 """
 
 from __future__ import annotations
@@ -126,13 +127,9 @@ def matlab_hough_accumulator(
 
 
 def default_hough_peak_neighborhood(shape: Tuple[int, int]) -> Tuple[int, int]:
-    """Approximate MATLAB houghpeaks default NHoodSize."""
-    values = []
-    for size in shape:
-        candidate = max(1, int(np.ceil(size / 50.0)))
-        if candidate % 2 == 0:
-            candidate += 1
-        values.append(candidate)
+    """Return MATLAB ``houghpeaks`` default ``NHoodSize``."""
+
+    values = np.maximum(2 * np.ceil((np.asarray(shape, dtype=np.float64) / 50.0) / 2.0) + 1, 1)
     return int(values[0]), int(values[1])
 
 
@@ -141,13 +138,14 @@ def hough_peaks(
     num_peaks: int,
     threshold: float = 0.0,
     neighborhood_size: Optional[Tuple[int, int]] = None,
+    theta_degrees: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """
-    Small MATLAB ``houghpeaks`` approximation.
+    Port the MATLAB ``houghpeaks`` suppression loop.
 
     Returns zero-based ``(row, col)`` peak coordinates. After each peak, an odd
-    neighborhood is suppressed, matching the important behavior of MATLAB's
-    default peak finder.
+    neighborhood is suppressed. The implementation keeps MATLAB's column-major
+    max tie handling and theta-boundary antisymmetry behavior.
     """
     h = np.asarray(accumulator, dtype=np.float64).copy()
     if h.ndim != 2:
@@ -158,24 +156,52 @@ def hough_peaks(
     if neighborhood_size is None:
         neighborhood_size = default_hough_peak_neighborhood(h.shape)
 
-    row_half = int(neighborhood_size[0]) // 2
-    col_half = int(neighborhood_size[1]) // 2
+    nhood = np.asarray(neighborhood_size, dtype=np.int64).reshape(-1)
+    if nhood.size != 2 or np.any(nhood <= 0) or np.any(nhood % 2 == 0):
+        raise ValueError("neighborhood_size must contain two positive odd integers.")
+    row_half = int(nhood[0]) // 2
+    col_half = int(nhood[1]) // 2
+
+    if theta_degrees is None:
+        theta = np.arange(-90.0, 90.0, dtype=np.float64)
+    else:
+        theta = np.asarray(theta_degrees, dtype=np.float64).reshape(-1)
+    if theta.size > 1:
+        min_theta = float(np.min(theta))
+        max_theta = float(np.max(theta))
+        theta_resolution = abs(max_theta - min_theta) / (theta.size - 1)
+        theta_antisymmetric = abs(min_theta + theta_resolution * int(nhood[1])) <= max_theta
+    else:
+        theta_antisymmetric = False
 
     peaks = []
     for _ in range(num_peaks):
-        flat_index = int(np.argmax(h))
-        value = float(h.flat[flat_index])
-        if value <= threshold:
+        flat_index = int(np.argmax(h.ravel(order="F")))
+        row, col = np.unravel_index(flat_index, h.shape, order="F")
+        value = float(h[row, col])
+        if value < threshold:
             break
 
-        row, col = np.unravel_index(flat_index, h.shape)
         peaks.append((row, col))
 
-        r0 = max(0, row - row_half)
-        r1 = min(h.shape[0], row + row_half + 1)
-        c0 = max(0, col - col_half)
-        c1 = min(h.shape[1], col + col_half + 1)
-        h[r0:r1, c0:c1] = 0.0
+        row_values = np.arange(max(row - row_half, 0), min(row + row_half, h.shape[0] - 1) + 1)
+        col_values = np.arange(col - col_half, col + col_half + 1)
+        qq, pp = np.meshgrid(col_values, row_values)
+        pp = pp.reshape(-1)
+        qq = qq.reshape(-1)
+
+        if theta_antisymmetric:
+            low = qq < 0
+            qq[low] = h.shape[1] + qq[low]
+            pp[low] = h.shape[0] - pp[low] - 1
+            high = qq >= h.shape[1]
+            qq[high] = qq[high] - h.shape[1]
+            pp[high] = h.shape[0] - pp[high] - 1
+
+        valid = (qq >= 0) & (qq < h.shape[1])
+        pp = pp[valid]
+        qq = qq[valid]
+        h[pp, qq] = 0.0
 
     return np.asarray(peaks, dtype=np.int64)
 
@@ -272,7 +298,7 @@ def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
     hmat_corrected = np.rint(hmat / radius_correction[np.newaxis, :])
     h_by_angle = np.max(hmat_corrected, axis=0) if hmat_corrected.size else np.asarray([])
 
-    peaks = hough_peaks(hmat_corrected, params.npeaks, threshold=0.0)
+    peaks = hough_peaks(hmat_corrected, params.npeaks, threshold=0.0, theta_degrees=theta)
     weights = np.asarray([hmat_corrected[row, col] for row, col in peaks], dtype=np.float64)
     alphas = np.asarray([gamma[col] for _, col in peaks], dtype=np.float64)
 
@@ -303,6 +329,43 @@ def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
         "X": x_lines,
         "Y": y_lines,
     }
+
+
+def estimate_fascicle_alpha_dohough(
+    binary_mask: np.ndarray,
+    *,
+    emask_radius: Optional[Tuple[float, float]] = None,
+    angle_range: Tuple[float, float] = (8.0, 80.0),
+    thetares: float = 1.0,
+    rhores: float = 1.0,
+    npeaks: int = 10,
+    houghangles: str = "specified",
+    replace_diagonal_bias: bool = True,
+) -> dict:
+    """
+    Estimate fascicle alpha from a binary fascicle mask using MATLAB-style Hough.
+
+    This is the compatibility layer for the current Python sequence workflow:
+    keep the existing fascicle mask, but replace the selected-segment angle with
+    the weighted median alpha returned by UltraTimTrack's ``dohough.m`` path.
+    """
+    bw = np.asarray(binary_mask).astype(bool)
+    if bw.ndim != 2:
+        raise ValueError("binary_mask must be a 2D image.")
+
+    if emask_radius is None:
+        emask_radius = (bw.shape[0] / 2.0, bw.shape[1] / 2.0)
+
+    params = DoHoughParams(
+        houghangles=houghangles,
+        angle_range=angle_range,
+        thetares=thetares,
+        rhores=rhores,
+        emask_radius=emask_radius,
+        npeaks=npeaks,
+        replace_diagonal_bias=replace_diagonal_bias,
+    )
+    return dohough(bw, params)
 
 
 def fascicle_ellipse_mask(

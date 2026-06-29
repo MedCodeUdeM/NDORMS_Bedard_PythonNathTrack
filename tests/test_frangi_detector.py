@@ -16,8 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import ultrasound_tracker.frangi_detector as frangi_mod
-from ultrasound_tracker.frangi_detector import (
+import ultrasound_tracker.legacy.frangi_detector as frangi_mod
+from ultrasound_tracker.legacy.frangi_detector import (
     FrangiDetector,
     frangi_filter,
     _hessian_eigenvalues,

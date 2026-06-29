@@ -32,9 +32,12 @@ class TestLineAngle:
     def test_horizontal_line_is_zero(self):
         assert np.isclose(geometry.line_angle(0, 0, 1, 0), 0)
 
-    def test_vertical_downward_is_90(self):
-        # In image coords y grows downward; -dy flips to +90
+    def test_vertical_downward_is_negative_90(self):
+        # In image coords y grows downward; atan2(-dy, dx) makes down negative.
         assert np.isclose(geometry.line_angle(0, 0, 0, 1), -90, atol=1e-5)
+
+    def test_vertical_upward_is_positive_90(self):
+        assert np.isclose(geometry.line_angle(0, 0, 0, -1), 90, atol=1e-5)
 
     def test_diagonal_up_right_is_45(self):
         # dy = -1 (going up in image), so -(-1)/1 → atan2(1,1) = 45°

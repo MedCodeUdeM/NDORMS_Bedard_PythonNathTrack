@@ -1,0 +1,5 @@
+dataset,variant,reduces_problem_FL_step,reduces_problem_deep_jump,preserves_outside_ANG_median_lt_1deg,preserves_outside_FL_median_lt_2,preserves_outside_ANG_p95_lt_2deg,preserves_outside_FL_p95_lt_15,deep_reject_fraction,deep_reject_fraction_lt_0_35,recommended_for_main_code
+test_23june_2,apo_gate,True,True,True,True,True,True,0.27411167512690354,True,True
+test_23june_2,apo_gate_alpha_persist,True,True,True,False,True,True,0.27411167512690354,True,False
+test23_june_3,apo_gate,True,True,True,True,True,False,0.35507246376811596,False,False
+test23_june_3,apo_gate_alpha_persist,True,True,True,False,True,False,0.35507246376811596,False,False

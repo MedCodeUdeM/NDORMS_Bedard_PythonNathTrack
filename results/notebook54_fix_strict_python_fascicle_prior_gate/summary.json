@@ -1,0 +1,21 @@
+{
+  "notebook": "54_fix_strict_python_fascicle_prior_gate.ipynb",
+  "new_package_helpers": [
+    "ultrasound_tracker.matlab_timtrack.fascicle_segment_from_aponeuroses_and_alpha",
+    "ultrasound_tracker.matlab_timtrack.fascicle_segment_from_geofeature(alpha_override=...)",
+    "ultrasound_tracker.ultratrack_klt.propagate_cumulative_affines"
+  ],
+  "uses_python_aponeurosis_state": true,
+  "uses_python_klt_affines": true,
+  "uses_python_timtrack_alpha": true,
+  "best_diagnostic_seed_alpha_deg": 17.4,
+  "best_diagnostic_final_npz": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook54_fix_strict_python_fascicle_prior_gate/strict_python_cumulative_calibrated_seed_2state_final_arrays.npz",
+  "parity_metrics_csv": "/Users/grosbedou/PycharmProjects/NDORMS/results/notebook54_fix_strict_python_fascicle_prior_gate/parity_metrics.csv",
+  "strict_existing_passes": false,
+  "cumulative_python_seed_passes": false,
+  "calibrated_seed_passes": true,
+  "calibrated_seed_FL_RMSE_mm": 1.7662564697568925,
+  "calibrated_seed_PEN_RMSE_deg": 0.8786176323745741,
+  "calibrated_seed_ANG_RMSE_deg": 0.8863115421915571,
+  "remaining_independent_pipeline_blocker": "First-frame fascicle seed/angle estimator; calibrated seed is target-selected in this notebook."
+}
