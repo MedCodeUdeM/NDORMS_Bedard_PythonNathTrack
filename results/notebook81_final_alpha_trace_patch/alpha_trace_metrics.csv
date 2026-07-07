@@ -1,6 +1,0 @@
-signal,bias,mae,rmse
-matlab_saved_alpha_vs_matlab_forward_X_plus_alpha,0.05772313982096803,0.22151094249952122,0.27787278155673684
-matlab_saved_alpha_vs_matlab_rts_trace_from_A,0.0,0.0,0.0
-python_saved_smoothed_alpha_vs_python_forward_X_plus_alpha,0.030567512079025576,0.25978378718761064,0.3768252605274613
-python_saved_smoothed_alpha_vs_notebook_exact_alpha_patch,0.0,0.0,0.0
-python_saved_smoother_gain_alpha_vs_exact_ratio_gain,0.0,0.0,0.0

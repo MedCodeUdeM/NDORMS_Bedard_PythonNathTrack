@@ -1,7 +1,0 @@
-stage,unit,frames,mean_mae,worst_mae,mean_max_abs,worst_max_abs
-same_mask_X,px,15,0.0,0.0,0.0,0.0
-same_mask_Y,px,15,0.0,0.0,0.0,0.0
-same_mask_alpha,deg,15,0.0,0.0,0.0,0.0
-same_mask_alphas,deg,15,0.0,0.0,0.0,0.0
-same_mask_h_by_angle,votes,15,0.0,0.0,0.0,0.0
-same_mask_weights,votes,15,0.0,0.0,0.0,0.0

@@ -1,7 +1,0 @@
-variant,higher-angle overweight before matlab,matlab candidate absent in python peaks,lower-angle overweight before matlab,near parity
-baseline_current,13.0,3,0.0,0.0
-no_diagonal_replacement,11.0,5,0.0,0.0
-no_radius_correction,0.0,5,11.0,0.0
-no_diag_no_radius,0.0,5,11.0,0.0
-angle_profile_localmax,13.0,1,0.0,2.0
-angle_profile_localmax_no_radius,0.0,1,12.0,3.0

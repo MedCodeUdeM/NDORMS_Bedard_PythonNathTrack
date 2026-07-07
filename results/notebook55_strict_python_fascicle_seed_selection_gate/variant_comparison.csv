@@ -1,3 +1,0 @@
-Variant,Seed source,Aponeuroses source,FL RMSE,PEN RMSE,ANG RMSE,Pass
-NB54 calibrated seed,MATLAB-calibrated,Python,1.7662564697568925,0.8786176323745741,0.8863115421915571,True
-NB55 autonomous seed,Python-only,Python,1.7551973229680593,0.8853617878534307,0.8936726954351027,True

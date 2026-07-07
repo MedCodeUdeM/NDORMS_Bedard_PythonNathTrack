@@ -1,4 +1,0 @@
-gate,passes,FL_RMSE_mm,PEN_RMSE_deg,ANG_RMSE_deg,note
-strict_python_one_step_existing,False,3.9532939040324373,2.0571061224401888,2.067603617570513,Current strict Python TimTrack per-frame prior from notebook 53.
-strict_python_cumulative_python_seed,False,2.422119491872769,1.3128924427514879,1.3245200350393016,Uses packaged cumulative affine propagation from Python TimTrack frame-0 seed.
-strict_python_cumulative_calibrated_seed,True,1.7662564697568925,0.8786176323745741,0.8863115421915571,Diagnostic ceiling with target-calibrated alpha0=17.40 deg; needs independent seed estimator before production use.

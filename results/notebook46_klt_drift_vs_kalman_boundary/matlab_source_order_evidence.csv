@@ -1,9 +1,0 @@
-line,meaning,source
-1650,TimTrack runs first for Hough ROItype.,% Run TimTrack
-1664,Forward UltraTrack/KLT runs before state estimation.,"handles = process_all_UltraTrack(hObject, eventdata, handles);"
-1669,State estimation is called after UltraTrack returns.,"handles = do_state_estimation(hObject, eventdata, handles);"
-1846,KLT propagates fascicle from previous fas_x/fas_y inside UltraTrack.,fas_prev = [handles.Region(i).Fascicle(j).fas_x{f-1} handles.Region(i).Fascicle(j).fas_y{f-1}];
-1854,Raw KLT fascicle x is copied to fas_x_original before state estimation.,handles.Region(i).Fascicle(j).fas_x_original{f} = handles.Region(i).Fascicle(j).fas_x{f};
-1855,Raw KLT fascicle y is copied to fas_y_original before state estimation.,handles.Region(i).Fascicle(j).fas_y_original{f} = handles.Region(i).Fascicle(j).fas_y{f};
-2165,State estimation function starts after the tracking function.,"function[handles] = do_state_estimation(hObject, eventdata, handles)"
-2191,Fascicle Kalman state estimator modifies the tracked geometry later.,"handles = state_estimator(handles,f,f-1);"
