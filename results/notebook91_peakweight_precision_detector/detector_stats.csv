@@ -1,0 +1,6 @@
+variant,flagged_frames,oracle_tp,oracle_fp,oracle_fn,oracle_precision,oracle_recall
+baseline_current,0,0,0,128,0.0,0.0
+oracle_overweight_to_localmax,128,128,0,0,1.0,1.0
+nb90_mass10_gap4_reference,175,29,146,99,0.1657142857142857,0.2265625
+exact_sparse_peakshape,9,7,2,121,0.7777777777777778,0.0546875
+exact_balanced_peakshape,22,8,14,120,0.36363636363636365,0.0625

@@ -1,0 +1,56 @@
+{
+  "branch1_sparse_rule": [
+    [
+      "mass_below_10deg",
+      ">=",
+      0.3
+    ],
+    [
+      "best_upper_share",
+      "<=",
+      0.1
+    ]
+  ],
+  "branch1_sparse_rule_text": "mass_below_10deg >= 0.3 and best_upper_share <= 0.1",
+  "branch2_precision_rule": [
+    [
+      "selected_is_top_family",
+      "<=",
+      0.0
+    ],
+    [
+      "mass_below_10deg",
+      ">=",
+      0.18
+    ],
+    [
+      "gap_to_lower_deg",
+      ">=",
+      6.0
+    ],
+    [
+      "selected_family_share",
+      "<=",
+      0.12
+    ]
+  ],
+  "branch2_precision_rule_text": "selected_is_top_family <= 0 and mass_below_10deg >= 0.18 and gap_to_lower_deg >= 6 and selected_family_share <= 0.12",
+  "branch2_coverage_rule": [
+    [
+      "selected_is_top_family",
+      "<=",
+      0.0
+    ],
+    [
+      "mass_below_10deg",
+      ">=",
+      0.18
+    ],
+    [
+      "gap_to_lower_deg",
+      ">=",
+      6.0
+    ]
+  ],
+  "branch2_coverage_rule_text": "selected_is_top_family <= 0 and mass_below_10deg >= 0.18 and gap_to_lower_deg >= 6"
+}

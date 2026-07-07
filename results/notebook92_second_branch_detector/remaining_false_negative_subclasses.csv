@@ -1,0 +1,4 @@
+subclass,frames,mass_below_10deg_mean,gap_to_lower_deg_mean,best_upper_share_mean,top_family_angle_offset_mean
+displaced_topfamily_nonlower,72,0.2746305984072385,3.486111111111111,0.17390466081647518,2.1944444444444446
+selected_topfamily_residual,33,0.25246080449623,2.3636363636363638,0.13462759307923672,0.0
+displaced_topfamily_lower_dominant,16,0.2708544041191169,4.28125,0.11163555792035774,-13.09375

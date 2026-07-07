@@ -75,6 +75,53 @@ def to_1d_float(values) -> np.ndarray:
     return arr
 
 
+def object_series_to_2d(values, width: Optional[int] = None) -> np.ndarray:
+    """
+    Convert a MATLAB object-series of numeric vectors into a dense 2D array.
+
+    Missing or shorter rows are padded with NaNs. When ``width`` is omitted it
+    is inferred from the longest row.
+    """
+
+    raw = np.asarray(values, dtype=object)
+    if raw.ndim == 2 and all(np.asarray(item).ndim == 0 for item in raw.reshape(-1)):
+        numeric = np.asarray(raw, dtype=np.float64)
+        if width is None:
+            width = int(numeric.shape[1])
+        out = np.full((numeric.shape[0], int(width)), np.nan, dtype=np.float64)
+        n = min(int(width), int(numeric.shape[1]))
+        if n:
+            out[:, :n] = numeric[:, :n]
+        return out
+
+    rows = raw.reshape(-1)
+    if width is None:
+        width = 0
+        for value in rows:
+            width = max(width, int(np.asarray(value, dtype=np.float64).reshape(-1).size))
+    out = np.full((len(rows), int(width)), np.nan, dtype=np.float64)
+    for idx, value in enumerate(rows):
+        row = np.asarray(value, dtype=np.float64).reshape(-1)
+        n = min(len(row), int(width))
+        if n:
+            out[idx, :n] = row[:n]
+    return out
+
+
+def matlab_fascicle_segments(x_values, y_values) -> np.ndarray:
+    """
+    Convert MATLAB fascicle point series to Python endpoint-order segments.
+
+    MATLAB stores ``fas_x`` / ``fas_y`` as two-point vectors ordered
+    ``[deep; superficial]``.  The returned array uses the Python contract
+    ``[x_superficial, y_superficial, x_deep, y_deep]``.
+    """
+
+    x_arr = object_series_to_2d(x_values, 2)
+    y_arr = object_series_to_2d(y_values, 2)
+    return np.column_stack([x_arr[:, 1], y_arr[:, 1], x_arr[:, 0], y_arr[:, 0]])
+
+
 def first_region(mat: Mapping) -> Mapping:
     """
     Return the first Fdat.Region entry.
@@ -121,6 +168,32 @@ def extract_final_region_arrays(mat: Mapping) -> Dict[str, np.ndarray | float]:
         "fascicle_angle_deg": to_1d_float(region["ANG"]),
         "image_depth_mm": image_depth_mm,
     }
+
+
+def extract_fascicle_state_arrays(mat: Mapping) -> Dict[str, np.ndarray]:
+    """
+    Extract saved MATLAB fascicle/Kalman arrays from ``Fdat.Region.Fascicle``.
+
+    This is the saved-state layer below ``FL/PEN/ANG`` and is useful for parity
+    notebooks that need the raw KLT prior, forward Kalman state, and final
+    reconstructed fascicle geometry.
+    """
+
+    fascicle = first_region(mat)["Fascicle"]
+    out: Dict[str, np.ndarray] = {
+        "fas_x_original_segment": matlab_fascicle_segments(fascicle["fas_x_original"], fascicle["fas_y_original"]),
+        "fas_x_segment": matlab_fascicle_segments(fascicle["fas_x"], fascicle["fas_y"]),
+        "fas_x_end_segment": matlab_fascicle_segments(fascicle["fas_x_end"], fascicle["fas_y_end"]),
+        "X_plus": object_series_to_2d(fascicle["X_plus"], 2),
+        "X_minus": object_series_to_2d(fascicle["X_minus"], 2),
+        "fas_p": object_series_to_2d(fascicle["fas_p"], 2),
+        "fas_p_minus": object_series_to_2d(fascicle["fas_p_minus"], 2),
+        "alpha": to_1d_float(fascicle.get("alpha", [])),
+        "K": to_1d_float(fascicle.get("K", [])),
+    }
+    if "A" in fascicle:
+        out["A"] = to_1d_float(fascicle["A"])
+    return out
 
 
 def _iter_geofeature_entries(mat: Mapping) -> Iterable[Mapping]:

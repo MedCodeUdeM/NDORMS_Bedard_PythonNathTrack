@@ -1,0 +1,97 @@
+variant,note,aligned_frame,python_frame,matlab_alpha_deg,matlab_alpha_reconstructed_deg,python_alpha_deg,abs_raw_error_deg,nearest_python_peak_to_matlab_deg,python_peak_hit_1deg,python_peak_hit_2deg,python_cum_weight_at_matlab_alpha,python_mass_within_2deg_of_matlab,python_peak_count,python_profile_max,python_profile_at_matlab_alpha,matlab_alpha_nearest_gamma_grid_deg,bias_mode
+baseline_current,current Python Hough path,71,72,12.5,12.5,26.5,14.0,2.0,False,True,0.20300751879699247,0.09261790840738209,10,357.0,212.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,71,72,12.5,12.5,26.5,14.0,2.0,False,True,0.20300751879699247,0.09261790840738209,10,357.0,212.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,71,72,12.5,12.5,9.0,3.5,0.0,True,True,0.7156647652479157,0.37735849056603776,10,279.0,205.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,71,72,12.5,12.5,9.0,3.5,0.0,True,True,0.7156647652479157,0.37735849056603776,10,279.0,205.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,71,72,12.5,12.5,22.0,9.5,0.0,True,True,0.30164854437039634,0.18835496317081724,10,357.0,212.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,71,72,12.5,12.5,14.0,1.5,0.0,True,True,0.4520985401459854,0.3001824817518248,10,279.0,205.0,0.0,near parity
+baseline_current,current Python Hough path,910,911,18.5,18.5,32.5,14.0,4.5,False,False,0.104787033546928,0.0,10,289.0,194.0,0.0,matlab candidate absent in python peaks
+no_diagonal_replacement,disable 45 deg diagonal replacement,910,911,18.5,18.5,32.5,14.0,4.5,False,False,0.10307749351130886,0.0,10,291.0,194.0,0.0,matlab candidate absent in python peaks
+no_radius_correction,disable ellipse/radius correction,910,911,18.5,18.5,7.5,11.0,5.0,False,False,1.0,0.0,10,229.0,188.0,0.0,matlab candidate absent in python peaks
+no_diag_no_radius,disable both diagonal replacement and radius correction,910,911,18.5,18.5,7.5,11.0,5.0,False,False,1.0,0.0,10,229.0,188.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,910,911,18.5,18.5,32.0,13.5,4.0,False,False,0.29750836742283376,0.0,10,289.0,194.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,910,911,18.5,18.5,12.5,6.0,0.0,True,True,1.0,0.17783251231527092,10,229.0,188.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,1171,1172,18.0,18.0,32.0,14.0,4.5,False,False,0.09882620219613783,0.0,10,288.0,176.0,0.0,matlab candidate absent in python peaks
+no_diagonal_replacement,disable 45 deg diagonal replacement,1171,1172,18.0,18.0,32.0,14.0,4.5,False,False,0.09477124183006536,0.0,10,303.0,176.0,0.0,matlab candidate absent in python peaks
+no_radius_correction,disable ellipse/radius correction,1171,1172,18.0,18.0,10.0,8.0,4.5,False,False,1.0,0.0,10,215.0,170.0,0.0,matlab candidate absent in python peaks
+no_diag_no_radius,disable both diagonal replacement and radius correction,1171,1172,18.0,18.0,10.0,8.0,4.5,False,False,1.0,0.0,10,215.0,170.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,1171,1172,18.0,18.0,28.5,10.5,0.5,True,True,0.29178136059771925,0.09555642941407787,10,288.0,176.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,1171,1172,18.0,18.0,11.5,6.5,0.5,True,True,0.8285714285714285,0.2642857142857143,10,215.0,170.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,882,883,14.5,14.5,28.0,13.5,0.5,True,True,0.1089001447178003,0.1089001447178003,10,301.0,194.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,882,883,14.5,14.5,28.5,14.0,0.5,True,True,0.1080789946140036,0.1080789946140036,10,301.0,194.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,882,883,14.5,14.5,10.5,4.0,0.0,True,True,0.9087038789025543,0.3926206244087039,10,245.0,188.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,882,883,14.5,14.5,10.5,4.0,0.0,True,True,0.9087038789025543,0.3926206244087039,10,245.0,188.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,882,883,14.5,14.5,26.0,11.5,0.5,True,True,0.1096938775510204,0.1096938775510204,10,301.0,194.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,882,883,14.5,14.5,13.0,1.5,0.5,True,True,0.6450989859971029,0.22018348623853212,10,245.0,188.0,0.0,near parity
+baseline_current,current Python Hough path,2553,2554,20.5,20.5,34.0,13.5,0.0,True,True,0.2930900621118012,0.09549689440993789,10,278.0,208.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,2553,2554,20.5,20.5,36.5,16.0,3.0,False,False,0.18879821958456974,0.0,10,303.0,208.0,0.0,matlab candidate absent in python peaks
+no_radius_correction,disable ellipse/radius correction,2553,2554,20.5,20.5,11.5,9.0,4.5,False,False,1.0,0.0,10,218.0,201.0,0.0,matlab candidate absent in python peaks
+no_diag_no_radius,disable both diagonal replacement and radius correction,2553,2554,20.5,20.5,11.5,9.0,4.5,False,False,1.0,0.0,10,218.0,201.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,2553,2554,20.5,20.5,27.0,6.5,0.0,True,True,0.49055861526357203,0.0967741935483871,10,278.0,208.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,2553,2554,20.5,20.5,11.5,9.0,3.0,False,False,1.0,0.0,10,218.0,201.0,0.0,matlab candidate absent in python peaks
+baseline_current,current Python Hough path,118,119,19.5,19.5,32.5,13.0,0.0,True,True,0.39416932907348246,0.19289137380191693,10,275.0,194.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,118,119,19.5,19.5,34.5,15.0,0.0,True,True,0.1985208252238225,0.09653561697158428,10,275.0,194.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,118,119,19.5,19.5,10.0,9.5,4.0,False,False,1.0,0.0,10,218.0,188.0,0.0,matlab candidate absent in python peaks
+no_diag_no_radius,disable both diagonal replacement and radius correction,118,119,19.5,19.5,10.0,9.5,4.0,False,False,1.0,0.0,10,218.0,188.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,118,119,19.5,19.5,18.0,1.5,0.0,True,True,0.6805668016194331,0.19554655870445342,10,275.0,194.0,0.0,near parity
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,118,119,19.5,19.5,11.5,8.0,0.0,True,True,1.0,0.18348144276006273,10,218.0,188.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,730,731,14.0,14.0,27.0,13.0,1.5,False,True,0.19498709915223,0.09915223000368596,10,304.0,246.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,730,731,14.0,14.0,28.0,14.0,1.5,False,True,0.19229371137768086,0.09778262450018176,10,304.0,246.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,730,731,14.0,14.0,7.0,7.0,1.0,True,True,0.9999999999999999,0.2871842843779233,10,238.0,238.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,730,731,14.0,14.0,7.0,7.0,1.0,True,True,0.9999999999999999,0.2871842843779233,10,238.0,238.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,730,731,14.0,14.0,27.0,13.0,1.5,False,True,0.29158878504672897,0.1005607476635514,10,304.0,246.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,730,731,14.0,14.0,11.0,3.0,0.0,True,True,0.7366892545982575,0.20232333010648595,10,238.0,238.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,980,981,17.5,17.5,30.5,13.0,0.0,True,True,0.0991672975018925,0.19530658591975775,10,295.0,195.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,980,981,17.5,17.5,32.0,14.5,0.0,True,True,0.09707298999629492,0.09707298999629492,10,295.0,195.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,980,981,17.5,17.5,9.5,8.0,0.0,True,True,1.0,0.09640924741760945,10,223.0,189.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,980,981,17.5,17.5,9.5,8.0,0.0,True,True,1.0,0.09640924741760945,10,223.0,189.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,980,981,17.5,17.5,29.0,11.5,0.0,True,True,0.2928134556574924,0.19724770642201833,10,295.0,195.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,980,981,17.5,17.5,11.5,6.0,0.0,True,True,0.9110565110565111,0.18525798525798526,10,223.0,189.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,1141,1142,14.5,14.5,27.5,13.0,0.5,True,True,0.19653587840226228,0.19653587840226228,10,313.0,197.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,1141,1142,14.5,14.5,27.5,13.0,0.5,True,True,0.19508771929824562,0.19508771929824562,10,313.0,197.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,1141,1142,14.5,14.5,11.5,3.0,0.5,True,True,0.8938700823421775,0.30603842634949685,10,236.0,191.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,1141,1142,14.5,14.5,11.5,3.0,0.5,True,True,0.8938700823421775,0.30603842634949685,10,236.0,191.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,1141,1142,14.5,14.5,26.0,11.5,0.5,True,True,0.28991747398636525,0.1994976677430929,10,313.0,197.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,1141,1142,14.5,14.5,13.0,1.5,0.5,True,True,0.6324705882352941,0.3063529411764706,10,236.0,191.0,0.0,near parity
+baseline_current,current Python Hough path,1414,1415,17.5,17.5,30.5,13.0,4.0,False,False,0.10849909584086799,0.0,10,300.0,220.0,0.0,matlab candidate absent in python peaks
+no_diagonal_replacement,disable 45 deg diagonal replacement,1414,1415,17.5,17.5,31.0,13.5,4.0,False,False,0.10748835542816194,0.0,10,300.0,220.0,0.0,matlab candidate absent in python peaks
+no_radius_correction,disable ellipse/radius correction,1414,1415,17.5,17.5,9.0,8.5,1.5,False,True,1.0,0.09227053140096618,10,247.0,213.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,1414,1415,17.5,17.5,9.0,8.5,1.5,False,True,1.0,0.09227053140096618,10,247.0,213.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,1414,1415,17.5,17.5,27.5,10.0,0.0,True,True,0.3899441340782123,0.18472998137802607,10,300.0,220.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,1414,1415,17.5,17.5,10.0,7.5,0.0,True,True,0.9167074963253308,0.26849583537481625,10,247.0,213.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,96,97,16.0,16.0,28.5,12.5,0.5,True,True,0.1958762886597938,0.09425625920471281,10,306.0,208.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,96,97,16.0,16.0,29.5,13.5,0.5,True,True,0.19544452608376195,0.0940484937545922,10,306.0,208.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,96,97,16.0,16.0,12.0,4.0,0.5,True,True,0.9034825870646767,0.1,10,227.0,201.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,96,97,16.0,16.0,12.0,4.0,0.5,True,True,0.9034825870646767,0.1,10,227.0,201.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,96,97,16.0,16.0,21.5,5.5,0.5,True,True,0.2045367166474433,0.1922337562475971,10,306.0,208.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,96,97,16.0,16.0,9.5,6.5,0.5,True,True,0.718131030980193,0.19349923819197562,10,227.0,201.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,437,438,19.0,19.0,31.5,12.5,0.5,True,True,0.2938026013771997,0.1063504208110176,10,288.0,201.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,437,438,19.0,19.0,34.5,15.5,0.5,True,True,0.18991534781008465,0.10231873389768127,10,312.0,201.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,437,438,19.0,19.0,9.5,9.5,0.5,True,True,0.9032258064516129,0.0967741935483871,10,234.0,195.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,437,438,19.0,19.0,9.5,9.5,0.5,True,True,0.9032258064516129,0.0967741935483871,10,234.0,195.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,437,438,19.0,19.0,19.5,0.5,0.5,True,True,0.48392096086788067,0.20418442464161177,10,288.0,201.0,0.0,near parity
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,437,438,19.0,19.0,14.0,5.0,0.5,True,True,0.7441860465116279,0.19844961240310077,10,234.0,195.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,613,614,17.5,17.5,30.0,12.5,0.0,True,True,0.2907538061641292,0.19977720014853323,10,290.0,227.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,613,614,17.5,17.5,30.0,12.5,1.5,False,True,0.09798903107861061,0.10237659963436929,10,290.0,227.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,613,614,17.5,17.5,10.0,7.5,0.0,True,True,0.9019893255701117,0.28578360019408056,10,223.0,220.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,613,614,17.5,17.5,10.0,7.5,0.0,True,True,0.9019893255701117,0.28578360019408056,10,223.0,220.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,613,614,17.5,17.5,26.5,9.0,0.0,True,True,0.2955832389580974,0.3004907512268781,10,290.0,227.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,613,614,17.5,17.5,12.5,5.0,0.0,True,True,0.7316948284690221,0.20225294418842804,10,223.0,220.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,1234,1235,19.5,19.5,32.0,12.5,1.5,False,True,0.20515653775322285,0.10460405156537753,10,308.0,195.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,1234,1235,19.5,19.5,33.5,14.0,1.5,False,True,0.20225127087872186,0.10312273057371096,10,308.0,195.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,1234,1235,19.5,19.5,10.0,9.5,1.5,False,True,1.0,0.1027900146842878,10,222.0,189.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,1234,1235,19.5,19.5,10.0,9.5,1.5,False,True,1.0,0.1027900146842878,10,222.0,189.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,1234,1235,19.5,19.5,31.0,11.5,1.5,False,True,0.30269058295964124,0.10612855007473841,10,308.0,195.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,1234,1235,19.5,19.5,11.5,8.0,1.5,False,True,0.833587786259542,0.10687022900763359,10,222.0,189.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,2215,2216,17.5,17.5,30.0,12.5,0.0,True,True,0.29396802325581395,0.09702034883720931,10,312.0,221.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,2215,2216,17.5,17.5,31.5,14.0,0.0,True,True,0.1973125884016973,0.09441301272984441,10,312.0,221.0,0.0,higher-angle overweight before matlab
+no_radius_correction,disable ellipse/radius correction,2215,2216,17.5,17.5,8.0,9.5,0.0,True,True,0.9999999999999999,0.09389671361502347,10,240.0,214.0,0.0,lower-angle overweight before matlab
+no_diag_no_radius,disable both diagonal replacement and radius correction,2215,2216,17.5,17.5,8.0,9.5,0.0,True,True,0.9999999999999999,0.09389671361502347,10,240.0,214.0,0.0,lower-angle overweight before matlab
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,2215,2216,17.5,17.5,27.5,10.0,0.0,True,True,0.3051678611844587,0.1007167106752169,10,312.0,221.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,2215,2216,17.5,17.5,10.5,7.0,0.0,True,True,0.9148832684824902,0.18433852140077822,10,240.0,214.0,0.0,lower-angle overweight before matlab
+baseline_current,current Python Hough path,2520,2521,25.0,25.0,37.0,12.0,0.5,True,True,0.09865824782951854,0.19376479873717442,10,276.0,184.0,0.0,higher-angle overweight before matlab
+no_diagonal_replacement,disable 45 deg diagonal replacement,2520,2521,25.0,25.0,45.0,20.0,10.5,False,False,0.0,0.0,10,291.0,184.0,0.0,matlab candidate absent in python peaks
+no_radius_correction,disable ellipse/radius correction,2520,2521,25.0,25.0,11.5,13.5,9.0,False,False,1.0,0.0,10,203.0,178.0,0.0,matlab candidate absent in python peaks
+no_diag_no_radius,disable both diagonal replacement and radius correction,2520,2521,25.0,25.0,11.5,13.5,9.0,False,False,1.0,0.0,10,203.0,178.0,0.0,matlab candidate absent in python peaks
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,2520,2521,25.0,25.0,38.0,13.0,0.5,True,True,0.09984025559105432,0.19608626198083068,10,276.0,184.0,0.0,higher-angle overweight before matlab
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,2520,2521,25.0,25.0,16.0,9.0,0.5,True,True,1.0,0.1769759450171821,10,203.0,178.0,0.0,lower-angle overweight before matlab

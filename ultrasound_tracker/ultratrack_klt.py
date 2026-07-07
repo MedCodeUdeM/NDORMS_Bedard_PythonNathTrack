@@ -171,10 +171,32 @@ def track_points(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Track points one frame forward with OpenCV PyrLK."""
 
+    old_points, new_points, _ = track_points_with_status(
+        prev_gray,
+        gray,
+        points,
+        config=config,
+    )
+    return old_points, new_points
+
+
+def track_points_with_status(
+    prev_gray: np.ndarray,
+    gray: np.ndarray,
+    points: np.ndarray,
+    *,
+    config: UltraTrackKLTConfig | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Track points one frame forward and also return the LK found-status mask."""
+
     cfg = config or UltraTrackKLTConfig()
     points_in = np.asarray(points, dtype=np.float32).reshape(-1, 1, 2)
     if len(points_in) == 0:
-        return np.empty((0, 2), dtype=np.float32), np.empty((0, 2), dtype=np.float32)
+        return (
+            np.empty((0, 2), dtype=np.float32),
+            np.empty((0, 2), dtype=np.float32),
+            np.empty((0,), dtype=bool),
+        )
 
     new_points, status, _ = cv2.calcOpticalFlowPyrLK(
         prev_gray,
@@ -190,9 +212,13 @@ def track_points(
         ),
     )
     if new_points is None or status is None:
-        return np.empty((0, 2), dtype=np.float32), np.empty((0, 2), dtype=np.float32)
+        return (
+            np.empty((0, 2), dtype=np.float32),
+            np.empty((0, 2), dtype=np.float32),
+            np.zeros(len(points_in), dtype=bool),
+        )
     keep = status.reshape(-1).astype(bool)
-    return points_in.reshape(-1, 2)[keep], new_points.reshape(-1, 2)[keep]
+    return points_in.reshape(-1, 2)[keep], new_points.reshape(-1, 2)[keep], keep
 
 
 def estimate_affine_matlab_coords(
@@ -439,4 +465,158 @@ def run_one_step_affine_video(
         "f_inlier_count": f_inlier_count,
         "f_affine_ok": f_affine_ok,
         "f_affine_matrices": f_affine_matrices,
+    }
+
+
+def run_persistent_affine_video(
+    video_path: str | Path,
+    geofeatures: Sequence[Mapping],
+    initial_fascicle_segment_1b: np.ndarray,
+    *,
+    super_cut: Sequence[float],
+    config: UltraTrackKLTConfig | None = None,
+    limit: Optional[int] = None,
+    progress_every: Optional[int] = None,
+) -> dict[str, np.ndarray]:
+    """
+    Run a MATLAB-style persistent fascicle tracker with explicit tracker state.
+
+    This mirrors the production UltraTimTrack control flow more closely than
+    :func:`run_one_step_affine_video`:
+
+    - points are initialized once on the first frame;
+    - the tracked point set is carried forward frame to frame;
+    - points are redetected only when the live tracker state drops below the
+      configured threshold; and
+    - each affine is applied directly to the previous tracked fascicle segment.
+
+    The returned ``fascicle_segments`` are therefore the closest Python analog
+    of MATLAB ``Fascicle.fas_x_original/fas_y_original`` that we can build from
+    the available video and saved geofeatures.
+    """
+
+    cfg = config or UltraTrackKLTConfig()
+    n = len(geofeatures)
+    if limit is not None:
+        n = min(n, int(limit))
+    if n <= 0:
+        raise ValueError("geofeatures must be non-empty.")
+
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise FileNotFoundError(video_path)
+
+    ok, first_frame = cap.read()
+    if not ok:
+        cap.release()
+        raise RuntimeError(f"Could not read first frame from {video_path}")
+    prev_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY) if first_frame.ndim == 3 else first_frame.copy()
+    shape = prev_gray.shape[:2]
+
+    out = np.full((n, 4), np.nan, dtype=np.float32)
+    out[0] = np.asarray(initial_fascicle_segment_1b, dtype=np.float32).reshape(4)
+    f_points_count = np.zeros(n, dtype=np.int32)
+    f_tracked_count = np.zeros(n, dtype=np.int32)
+    f_inlier_count = np.zeros(n, dtype=np.int32)
+    f_affine_ok = np.zeros(n, dtype=bool)
+    f_affine_matrices = np.full((n, 2, 3), np.nan, dtype=np.float32)
+    tracker_redetected = np.zeros(n, dtype=bool)
+    tracker_found_fraction = np.full(n, np.nan, dtype=np.float64)
+    tracker_state_points = np.empty(n, dtype=object)
+    tracked_old_points = np.empty(n, dtype=object)
+    tracked_new_points = np.empty(n, dtype=object)
+
+    init_masks = tracking_masks_from_geofeature(
+        geofeatures[0],
+        shape=shape,
+        super_cut=super_cut,
+    )
+    tracker_points = detect_min_eigen_like(
+        prev_gray,
+        init_masks["fascicle_mask"],
+        max_corners=cfg.max_fascicle_corners,
+        config=cfg,
+    )
+    tracker_points = filter_points_by_mask(tracker_points, init_masks["fcor_mask"])
+    f_points_count[0] = len(tracker_points)
+    tracker_state_points[0] = tracker_points.reshape(-1, 2).astype(np.float32)
+    tracked_old_points[0] = np.empty((0, 2), dtype=np.float32)
+    tracked_new_points[0] = np.empty((0, 2), dtype=np.float32)
+
+    for frame in range(1, n):
+        ok, current_frame = cap.read()
+        if not ok:
+            out = out[:frame]
+            f_points_count = f_points_count[:frame]
+            f_tracked_count = f_tracked_count[:frame]
+            f_inlier_count = f_inlier_count[:frame]
+            f_affine_ok = f_affine_ok[:frame]
+            f_affine_matrices = f_affine_matrices[:frame]
+            tracker_redetected = tracker_redetected[:frame]
+            tracker_found_fraction = tracker_found_fraction[:frame]
+            tracker_state_points = tracker_state_points[:frame]
+            tracked_old_points = tracked_old_points[:frame]
+            tracked_new_points = tracked_new_points[:frame]
+            break
+
+        gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY) if current_frame.ndim == 3 else current_frame.copy()
+        old_points, new_points, found_mask = track_points_with_status(prev_gray, gray, tracker_points, config=cfg)
+        affine, inliers = estimate_affine_matlab_coords(old_points, new_points, config=cfg)
+
+        f_points_count[frame] = len(tracker_points)
+        f_tracked_count[frame] = len(new_points)
+        f_inlier_count[frame] = int(inliers)
+        tracked_old_points[frame] = old_points.astype(np.float32)
+        tracked_new_points[frame] = new_points.astype(np.float32)
+        if len(found_mask):
+            tracker_found_fraction[frame] = float(np.mean(found_mask))
+
+        if affine is not None:
+            out[frame] = apply_affine_1b(out[frame - 1], affine)
+            f_affine_ok[frame] = True
+            f_affine_matrices[frame] = affine
+        else:
+            out[frame] = out[frame - 1]
+
+        current_points = new_points.reshape(-1, 1, 2).astype(np.float32)
+        if len(current_points) < int(cfg.min_fascicle_points):
+            current_masks = tracking_masks_from_geofeature(
+                geofeatures[frame],
+                shape=shape,
+                super_cut=super_cut,
+            )
+            current_points = detect_min_eigen_like(
+                gray,
+                current_masks["fascicle_mask"],
+                max_corners=cfg.max_fascicle_corners,
+                config=cfg,
+            )
+            tracker_redetected[frame] = True
+        else:
+            current_masks = tracking_masks_from_geofeature(
+                geofeatures[frame],
+                shape=shape,
+                super_cut=super_cut,
+            )
+        current_points = filter_points_by_mask(current_points, current_masks["fcor_mask"])
+        tracker_points = current_points.astype(np.float32)
+        tracker_state_points[frame] = tracker_points.reshape(-1, 2).astype(np.float32)
+
+        prev_gray = gray
+        if progress_every and (frame % int(progress_every) == 0 or frame == n - 1):
+            print(f"persistent KLT processed {frame + 1}/{n}")
+
+    cap.release()
+    return {
+        "fascicle_segments": out,
+        "f_points_count": f_points_count,
+        "f_tracked_count": f_tracked_count,
+        "f_inlier_count": f_inlier_count,
+        "f_affine_ok": f_affine_ok,
+        "f_affine_matrices": f_affine_matrices,
+        "tracker_redetected": tracker_redetected,
+        "tracker_found_fraction": tracker_found_fraction,
+        "tracker_state_points": tracker_state_points,
+        "tracked_old_points": tracked_old_points,
+        "tracked_new_points": tracked_new_points,
     }

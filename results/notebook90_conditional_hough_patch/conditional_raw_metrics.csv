@@ -1,0 +1,6 @@
+variant,note,raw_changed_fraction_vs_baseline,nearest_peak_rmse_deg,candidate_hit_rate_2deg,candidate_present_but_raw_wrong_rate,raw_vs_matlab_bias,raw_vs_matlab_mae,raw_vs_matlab_rmse
+baseline_current,no conditional patch,0.0,0.7224562171830461,0.9722430607651913,0.05438859714928732,1.1877344336084021,1.5572018004501125,2.8086479622487333
+oracle_overweight_to_localmax,MATLAB-aware ceiling: baseline nearest peak <=2 deg and baseline raw >5 deg too high,0.04801200300075019,0.7172455020964366,0.9718679669917479,0.029257314328582147,0.9480495123780945,1.3400225056264066,2.296254982953044
+heuristic_mass10_gap6_to_localmax,Python-only conservative rule: mass below alpha-10 deg >=0.30 and nearest lower-gap >=6 deg,0.03075768942235559,0.7054471375772808,0.9744936234058514,0.06489122280570142,0.97768192048012,1.6757314328582145,3.034451470024028
+heuristic_mass10_gap4_to_localmax,Python-only broader rule: mass below alpha-10 deg >=0.25 and nearest lower-gap >=4 deg,0.06564141035258815,0.6995738709387487,0.9748687171792948,0.07351837959489872,0.7920105026256564,1.7837584396099024,3.2113446457221624
+heuristic_localmax_gap10_to_localmax,Python-only dual-solver rule: baseline alpha exceeds localmax alpha by >=10 deg,0.059639909977494375,0.7247888173167594,0.9741185296324081,0.0918979744936234,0.48593398349587397,1.9701800450112528,3.6236982555480273

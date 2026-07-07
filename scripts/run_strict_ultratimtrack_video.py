@@ -54,7 +54,6 @@ import ultrasound_tracker.utils as ut
 from ultrasound_tracker.matlab_aponeurosis import make_matlab_apox
 from ultrasound_tracker.matlab_timtrack import (
     detect_timtrack_geofeature_from_image,
-    fascicle_segment_from_geofeature,
     run_timtrack_geofeatures_from_video,
 )
 from ultrasound_tracker.speckle_confidence import (
@@ -76,8 +75,7 @@ from ultrasound_tracker.strict_fascicle_seed import (
 )
 from ultrasound_tracker.ultratrack_klt import (
     UltraTrackKLTConfig,
-    propagate_cumulative_affines,
-    run_one_step_affine_video,
+    run_persistent_affine_video,
 )
 from ultrasound_tracker.ultratimtrack_aponeurosis import (
     AponeurosisGatingConfig,
@@ -790,6 +788,7 @@ def run_fascicle_kalman_mode(
     deep_lines: np.ndarray,
     kalman_config: MatlabTwoStateKalmanConfig,
     *,
+    prediction_affine_matrices: np.ndarray | None = None,
     confidence_arrays: Mapping[str, np.ndarray] | None = None,
     mm_per_pixel: float | None = None,
 ) -> dict[str, np.ndarray]:
@@ -819,8 +818,50 @@ def run_fascicle_kalman_mode(
         deep_lines,
         config=kalman_run_config,
         mm_per_pixel=mm_per_pixel,
+        prediction_affine_matrices=prediction_affine_matrices,
         **kwargs,
     )
+
+
+def add_kalman_state_arrays(
+    arrays: dict[str, np.ndarray],
+    result: Mapping[str, np.ndarray],
+    *,
+    prefix: str = "",
+) -> None:
+    """Save parity-friendly internal Kalman arrays into the output bundle."""
+
+    def save(key: str, source_key: str | None = None) -> None:
+        value = result.get(source_key or key)
+        if value is not None:
+            arrays[f"{prefix}{key}"] = np.asarray(value)
+
+    for key in [
+        "X_plus",
+        "X_smooth",
+        "X_minus",
+        "fas_p",
+        "fas_p_smooth",
+        "fas_p_minus",
+        "forward_X_plus",
+        "forward_fas_p",
+        "kalman_gain",
+        "smoother_gain",
+        "measurement_R_diag",
+        "measurement_r_scale",
+        "measurement_r_scale_theta",
+        "measurement_r_scale_length",
+        "predicted_segments",
+        "previous_corrected_segments",
+        "prediction_used_affine",
+        "forward_fascicle_segments",
+        "forward_fascicle_end_segments",
+        "forward_ANG_deg",
+        "forward_PEN_deg",
+        "forward_FL_px",
+        "forward_FL_mm",
+    ]:
+        save(key)
 
 
 def _finite_delta_stats(estimate: np.ndarray, reference: np.ndarray) -> dict[str, float | int]:
@@ -1355,18 +1396,17 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     clusters.to_csv(run_dir / f"{args.name}_seed_clusters.csv", index=False)
     selection["per_frame_best"].to_csv(run_dir / f"{args.name}_selected_seed_cluster.csv", index=False)
 
-    print("\nEstimating fascicle KLT affines...")
-    reference_segments = np.asarray([fascicle_segment_from_geofeature(entry) for entry in geofeatures], dtype=np.float64)
-    klt = run_one_step_affine_video(
+    print("\nEstimating fascicle KLT affines with persistent tracker state...")
+    klt = run_persistent_affine_video(
         args.video,
         geofeatures,
-        reference_segments,
+        selected_seed,
         super_cut=np.asarray(parms["apo"]["super"]["cut"], dtype=float).reshape(-1),
         config=klt_config,
         limit=n,
         progress_every=args.progress_every,
     )
-    fascicle_prior = propagate_cumulative_affines(selected_seed, np.asarray(klt["f_affine_matrices"], dtype=float))
+    fascicle_prior = np.asarray(klt["fascicle_segments"], dtype=np.float64)
 
     print("\nRunning aponeurosis state estimator...")
     sup_meas, deep_meas = geofeature_measurement_lines(geofeatures, frame0.shape[1])
@@ -1433,6 +1473,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         super_lines_arr,
         deep_lines_arr,
         kalman_config,
+        prediction_affine_matrices=np.asarray(klt["f_affine_matrices"], dtype=float),
         confidence_arrays=confidence_arrays,
         mm_per_pixel=mm_per_pixel_arg,
     )
@@ -1448,6 +1489,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             super_lines_arr,
             deep_lines_arr,
             kalman_config,
+            prediction_affine_matrices=np.asarray(klt["f_affine_matrices"], dtype=float),
             mm_per_pixel=mm_per_pixel_arg,
         )
         comparison_rows = kalman_comparison_rows(final, fixed_reference)
@@ -1459,6 +1501,16 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "sup_apo_lines": np.asarray(apo_state["super_lines"], dtype=np.float64),
         "deep_apo_lines": np.asarray(apo_state["deep_lines"], dtype=np.float64),
         "klt_prior_segments": fascicle_prior,
+        "klt_affine_ok": np.asarray(klt["f_affine_ok"], dtype=bool),
+        "klt_affine_matrices": np.asarray(klt["f_affine_matrices"], dtype=np.float64),
+        "klt_points_count": np.asarray(klt["f_points_count"], dtype=np.int32),
+        "klt_tracked_count": np.asarray(klt["f_tracked_count"], dtype=np.int32),
+        "klt_inlier_count": np.asarray(klt["f_inlier_count"], dtype=np.int32),
+        "klt_tracker_redetected": np.asarray(klt["tracker_redetected"], dtype=bool),
+        "klt_tracker_found_fraction": np.asarray(klt["tracker_found_fraction"], dtype=np.float64),
+        "klt_tracker_state_points": np.asarray(klt["tracker_state_points"], dtype=object),
+        "klt_tracked_old_points": np.asarray(klt["tracked_old_points"], dtype=object),
+        "klt_tracked_new_points": np.asarray(klt["tracked_new_points"], dtype=object),
         "fascicle_segments": np.asarray(final["fascicle_segments"], dtype=np.float64),
         "fascicle_end_segments": np.asarray(final["fascicle_end_segments"], dtype=np.float64),
         "ANG_deg": np.asarray(final["ANG_deg"], dtype=np.float64),
@@ -1491,6 +1543,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "apo_gating_reasons": np.asarray(apo_state["gating_reasons"], dtype=str),
         "apo_consecutive_rejections": np.asarray(apo_state["consecutive_rejections"], dtype=np.int32),
     }
+    add_kalman_state_arrays(arrays, final)
     if "FL_mm" in final:
         arrays["FL_mm"] = np.asarray(final["FL_mm"], dtype=np.float64)
     if fixed_reference is not None:
@@ -1499,6 +1552,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             fixed_reference["fascicle_end_segments"],
             dtype=np.float64,
         )
+        add_kalman_state_arrays(arrays, fixed_reference, prefix="fixed_")
         for key in ["ANG_deg", "PEN_deg", "FL_px", "FL_mm"]:
             if key not in final or key not in fixed_reference:
                 continue

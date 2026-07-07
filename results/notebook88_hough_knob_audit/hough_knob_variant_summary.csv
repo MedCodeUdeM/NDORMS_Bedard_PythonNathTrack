@@ -1,0 +1,7 @@
+variant,note,n_frames,raw_vs_matlab_bias,raw_vs_matlab_mae,raw_vs_matlab_rmse,nearest_peak_rmse_deg,candidate_hit_rate_1deg,candidate_hit_rate_2deg,mean_cum_weight_at_matlab_alpha,mean_mass_within_2deg_of_matlab,high_angle_overweight_rate,candidate_absent_rate,matlab_alpha_nearest_gamma_grid_mean_deg,matlab_alpha_nearest_gamma_grid_max_deg
+angle_profile_localmax_no_radius,1D angle-profile local maxima without radius correction,16,-5.5,5.6875,6.212386819894589,0.8926785535678563,0.875,0.9375,0.8165734853520491,0.19817388871726632,0.0,0.0625,0.0,0.0
+no_radius_correction,disable ellipse/radius correction,16,-7.8125,7.8125,8.306623862918075,3.247595264191645,0.5625,0.6875,0.9516835278486906,0.13944538291015726,0.0,0.3125,0.0,0.0
+no_diag_no_radius,disable both diagonal replacement and radius correction,16,-7.8125,7.8125,8.306623862918075,3.247595264191645,0.5625,0.6875,0.9516835278486906,0.13944538291015726,0.0,0.3125,0.0,0.0
+angle_profile_localmax,replace 2D houghpeaks with 1D angle-profile local maxima,16,9.09375,9.28125,10.01795263514457,1.1726039399558574,0.8125,0.9375,0.3204850644876468,0.15423766127764485,0.8125,0.0625,0.0,0.0
+baseline_current,current Python Hough path,16,13.03125,13.03125,13.044994250669488,2.0348525745124633,0.625,0.8125,0.19876157289875457,0.111042130935423,0.8125,0.1875,0.0,0.0
+no_diagonal_replacement,disable 45 deg diagonal replacement,16,14.46875,14.46875,14.562902354956583,3.4232659844072884,0.4375,0.6875,0.14819436461962637,0.07396596402361814,0.6875,0.3125,0.0,0.0

@@ -1,0 +1,6 @@
+signal,bias,mae,rmse
+alpha_patch_minus_current_smoothed_alpha,0.0,0.0,0.0
+FL_patch_minus_current_mm,0.0,0.0,0.0
+ANG_patch_minus_current_deg,6.396483742776595e-17,2.9210609092013123e-15,9.111615904428338e-15
+end_x_sup_patch_minus_current,0.0,0.0,0.0
+end_x_deep_patch_minus_current,0.0,0.0,0.0

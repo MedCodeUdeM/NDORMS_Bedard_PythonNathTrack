@@ -34,6 +34,7 @@ from .ultratrack_klt import (
     UltraTrackKLTConfig,
     propagate_cumulative_affines,
     read_gray_frames,
+    run_persistent_affine_video,
     run_one_step_affine_video,
 )
 from .ultratimtrack_aponeurosis import run_matlab_aponeurosis_state_video
@@ -67,9 +68,10 @@ __all__ = [
     "roi",
     "run_matlab_2state_kalman",
     "run_matlab_aponeurosis_state_video",
+    "run_persistent_affine_video",
     "run_one_step_affine_video",
     "run_timtrack_geofeatures_from_video",
     "select_autonomous_fascicle_seed",
 ]
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
