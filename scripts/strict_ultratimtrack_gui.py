@@ -52,14 +52,20 @@ from matplotlib.figure import Figure
 
 import ultrasound_tracker.roi as roi
 from scripts.run_strict_ultratimtrack_video import (
+    DEFAULT_UTT_EXPORT,
     VIDEO_EXTENSIONS,
     process_video,
     read_first_frame,
 )
 
 
-DEFAULT_UTT_EXPORT = Path("/Users/grosbedou/Documents/GitHub/UltraTimTrack/UTT_numeric_export.mat")
 DEFAULT_RESULTS_DIR = PROJECT_ROOT / "results" / "strict_ultratimtrack_runs"
+BASE_METRIC_COLUMNS = ("Frame", "Time", "FL", "PEN", "ANG")
+OPTIONAL_METRIC_COLUMNS = {
+    "FixedFL": ("fixed_FL_mm", "fixed_FL_px"),
+    "FixedPEN": ("fixed_PEN_deg",),
+    "FixedANG": ("fixed_ANG_deg",),
+}
 
 
 def _as_float(text: str, default: float | None = None) -> float | None:
@@ -74,6 +80,35 @@ def _as_int(text: str, default: int | None = None) -> int | None:
     if value == "":
         return default
     return int(value)
+
+
+def _csv_float(value: str | None) -> float:
+    if value is None or str(value).strip() == "":
+        return float("nan")
+    return float(value)
+
+
+def _read_metrics_csv(csv_path: Path) -> dict[str, list[float]]:
+    metrics = {key: [] for key in [*BASE_METRIC_COLUMNS, *OPTIONAL_METRIC_COLUMNS.keys()]}
+    with csv_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = set(reader.fieldnames or [])
+        optional_fields = {
+            key: next((column for column in aliases if column in fieldnames), None)
+            for key, aliases in OPTIONAL_METRIC_COLUMNS.items()
+        }
+        for row in reader:
+            for key in BASE_METRIC_COLUMNS:
+                metrics[key].append(_csv_float(row.get(key)))
+            for key, column in optional_fields.items():
+                if column is not None:
+                    metrics[key].append(_csv_float(row.get(column)))
+    return metrics
+
+
+def _has_metric_values(values: list[float]) -> bool:
+    arr = np.asarray(values, dtype=np.float64)
+    return bool(arr.size and np.any(np.isfinite(arr)))
 
 
 def _video_filetypes() -> list[tuple[str, str]]:
@@ -332,12 +367,16 @@ class StrictUltraTimTrackGUI:
         self.image_depth_var = tk.StringVar(value="")
         self.limit_var = tk.StringVar(value="")
         self.seed_frames_var = tk.StringVar(value="11")
-        self.kalman_mode_var = tk.StringVar(value="fixed")
-        self.compare_fixed_var = tk.BooleanVar(value=False)
-        self.save_debug_var = tk.BooleanVar(value=True)
+        self.kalman_mode_var = tk.StringVar(value="adaptive-anisotropic")
+        self.compare_fixed_var = tk.BooleanVar(value=True)
+        self.save_debug_var = tk.BooleanVar(value=False)
         self.save_confidence_plot_var = tk.BooleanVar(value=False)
-        self.fas_angle_min_var = tk.StringVar(value="5")
-        self.fas_angle_max_var = tk.StringVar(value="60")
+        self.fas_angle_auto_var = tk.BooleanVar(value=True)
+        self.fas_angle_min_var = tk.StringVar(value="")
+        self.fas_angle_max_var = tk.StringVar(value="")
+        self.hough_localmax_fallback_var = tk.BooleanVar(value=True)
+        self.hough_fallback_mass_var = tk.StringVar(value="0.25")
+        self.hough_fallback_gap_var = tk.StringVar(value="4")
         self.candidate_persistence_var = tk.BooleanVar(value=True)
         self.max_angle_step_var = tk.StringVar(value="8")
         self.apo_gating_var = tk.BooleanVar(value=True)
@@ -422,18 +461,38 @@ class StrictUltraTimTrackGUI:
         angles = ttk.LabelFrame(content, text="Fascicle angle", padding=10)
         angles.pack(fill="x", pady=(0, 8))
         angles.columnconfigure(0, weight=1)
-        ttk.Label(angles, text="Min angle (deg)").grid(row=0, column=0, sticky="w", pady=2)
-        ttk.Entry(angles, textvariable=self.fas_angle_min_var).grid(row=1, column=0, sticky="ew", pady=(0, 6))
-        ttk.Label(angles, text="Max angle (deg)").grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Entry(angles, textvariable=self.fas_angle_max_var).grid(row=3, column=0, sticky="ew", pady=(0, 6))
+        ttk.Checkbutton(angles, text="Auto angle orientation", variable=self.fas_angle_auto_var).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            pady=(0, 4),
+        )
+        ttk.Label(angles, text="Manual min angle (deg)").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(angles, textvariable=self.fas_angle_min_var).grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(angles, text="Manual max angle (deg)").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(angles, textvariable=self.fas_angle_max_var).grid(row=4, column=0, sticky="ew", pady=(0, 6))
         ttk.Checkbutton(angles, text="Candidate persistence", variable=self.candidate_persistence_var).grid(
-            row=4,
+            row=5,
             column=0,
             sticky="w",
             pady=(4, 2),
         )
-        ttk.Label(angles, text="Max angle step").grid(row=5, column=0, sticky="w", pady=2)
-        ttk.Entry(angles, textvariable=self.max_angle_step_var).grid(row=6, column=0, sticky="ew", pady=(0, 2))
+        ttk.Label(angles, text="Max angle step").grid(row=6, column=0, sticky="w", pady=2)
+        ttk.Entry(angles, textvariable=self.max_angle_step_var).grid(row=7, column=0, sticky="ew", pady=(0, 2))
+
+        hough = ttk.LabelFrame(content, text="Hough detector", padding=10)
+        hough.pack(fill="x", pady=(0, 8))
+        hough.columnconfigure(0, weight=1)
+        ttk.Checkbutton(hough, text="Localmax fallback", variable=self.hough_localmax_fallback_var).grid(
+            row=0,
+            column=0,
+            sticky="w",
+            pady=(0, 4),
+        )
+        ttk.Label(hough, text="Mass below 10 deg").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(hough, textvariable=self.hough_fallback_mass_var).grid(row=2, column=0, sticky="ew", pady=(0, 6))
+        ttk.Label(hough, text="Gap to lower (deg)").grid(row=3, column=0, sticky="w", pady=2)
+        ttk.Entry(hough, textvariable=self.hough_fallback_gap_var).grid(row=4, column=0, sticky="ew", pady=(0, 2))
 
         apo = ttk.LabelFrame(content, text="Aponeurosis gating", padding=10)
         apo.pack(fill="x", pady=(0, 8))
@@ -532,13 +591,15 @@ class StrictUltraTimTrackGUI:
         plot_area = ttk.Frame(parent)
         plot_area.grid(row=2, column=0, sticky="ew")
         plot_area.columnconfigure(0, weight=1)
-        self.figure = Figure(figsize=(10, 3.1), dpi=100)
-        self.ax_fl = self.figure.add_subplot(121)
-        self.ax_pen = self.figure.add_subplot(122)
+        self.figure = Figure(figsize=(10, 3.4), dpi=100)
+        self.ax_fl = self.figure.add_subplot(131)
+        self.ax_pen = self.figure.add_subplot(132)
+        self.ax_ang = self.figure.add_subplot(133)
         self.canvas = FigureCanvasTkAgg(self.figure, master=plot_area)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="ew")
         self.fl_cursor = None
         self.pen_cursor = None
+        self.ang_cursor = None
 
     def choose_video(self) -> None:
         path = filedialog.askopenfilename(
@@ -638,13 +699,23 @@ class StrictUltraTimTrackGUI:
 
         kalman_mode = self.kalman_mode_var.get()
         adaptive_r = kalman_mode != "fixed"
-        fas_angle_min = _as_float(self.fas_angle_min_var.get(), None)
-        fas_angle_max = _as_float(self.fas_angle_max_var.get(), None)
+        entered_fas_angle_min = _as_float(self.fas_angle_min_var.get(), None)
+        entered_fas_angle_max = _as_float(self.fas_angle_max_var.get(), None)
+        manual_fas_angle = entered_fas_angle_min is not None or entered_fas_angle_max is not None
+        fas_angle_auto = bool(self.fas_angle_auto_var.get()) and not manual_fas_angle
+        fas_angle_min = entered_fas_angle_min if manual_fas_angle else None
+        fas_angle_max = entered_fas_angle_max if manual_fas_angle else None
         apo_maxangle = _as_float(self.apo_maxangle_var.get(), None)
         if fas_angle_min is not None and fas_angle_max is not None and fas_angle_min >= fas_angle_max:
             raise ValueError("Fascicle minimum angle must be smaller than maximum angle.")
         if apo_maxangle is not None and apo_maxangle < 0:
             raise ValueError("Apo maxangle must be non-negative.")
+        hough_fallback_mass_value = _as_float(self.hough_fallback_mass_var.get(), 0.25)
+        hough_fallback_gap_value = _as_float(self.hough_fallback_gap_var.get(), 4.0)
+        hough_fallback_mass = float(0.25 if hough_fallback_mass_value is None else hough_fallback_mass_value)
+        hough_fallback_gap = float(4.0 if hough_fallback_gap_value is None else hough_fallback_gap_value)
+        if hough_fallback_mass < 0 or hough_fallback_gap < 0:
+            raise ValueError("Hough fallback thresholds must be non-negative.")
         limit = _as_int(self.limit_var.get(), None)
         total_video_frames = int(self.first_frame_info[1]) if self.first_frame_info else 0
         progress_total = min(limit or total_video_frames, total_video_frames) if total_video_frames else (limit or 0)
@@ -667,6 +738,10 @@ class StrictUltraTimTrackGUI:
             seed_frames=_as_int(self.seed_frames_var.get(), 11) or 11,
             fas_angle_min=fas_angle_min,
             fas_angle_max=fas_angle_max,
+            fas_angle_auto=fas_angle_auto,
+            hough_localmax_fallback=bool(self.hough_localmax_fallback_var.get()),
+            hough_fallback_min_mass_below_10deg=hough_fallback_mass,
+            hough_fallback_min_gap_to_lower_deg=hough_fallback_gap,
             candidate_persistence=bool(self.candidate_persistence_var.get()),
             max_angle_step=float(_as_float(self.max_angle_step_var.get(), 8.0) or 8.0),
             candidate_weight_bonus=2.0,
@@ -859,14 +934,8 @@ class StrictUltraTimTrackGUI:
         self.root.after(delay, self._play_step)
 
     def load_metrics(self, csv_path: Path) -> None:
-        metrics = {"Frame": [], "Time": [], "FL": [], "PEN": [], "ANG": []}
-        with csv_path.open(newline="") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                for key in metrics:
-                    if key in row and row[key] != "":
-                        metrics[key].append(float(row[key]))
-        self.metrics = metrics
+        self.metrics = _read_metrics_csv(csv_path)
+        metrics = self.metrics
         if metrics["FL"]:
             self.final_fl_var.set(f"Final FL: {metrics['FL'][-1]:.2f}")
         if metrics["PEN"]:
@@ -877,36 +946,58 @@ class StrictUltraTimTrackGUI:
     def _draw_empty_plots(self) -> None:
         self.ax_fl.clear()
         self.ax_pen.clear()
-        self.ax_fl.set_title("Fascicle Length")
-        self.ax_fl.set_xlabel("Time (s)")
-        self.ax_fl.set_ylabel("FL")
-        self.ax_pen.set_title("Pennation")
-        self.ax_pen.set_xlabel("Time (s)")
-        self.ax_pen.set_ylabel("PEN (deg)")
-        self.ax_fl.grid(True, alpha=0.25)
-        self.ax_pen.grid(True, alpha=0.25)
+        self.ax_ang.clear()
+        self._format_metric_axis(self.ax_fl, "Fascicle Length", "FL")
+        self._format_metric_axis(self.ax_pen, "Pennation", "PEN (deg)")
+        self._format_metric_axis(self.ax_ang, "Angle", "ANG (deg)")
         self.figure.tight_layout()
         self.canvas.draw_idle()
+
+    def _format_metric_axis(self, axis, title: str, ylabel: str) -> None:
+        axis.set_title(title)
+        axis.set_xlabel("Time (s)")
+        axis.set_ylabel(ylabel)
+        axis.grid(True, alpha=0.25)
+
+    def _plot_metric_series(
+        self,
+        axis,
+        time_s: np.ndarray,
+        primary_key: str,
+        fixed_key: str,
+        color: str,
+        title: str,
+        ylabel: str,
+    ) -> bool:
+        primary = np.asarray(self.metrics.get(primary_key, []), dtype=np.float64)
+        n_primary = min(len(time_s), len(primary))
+        if n_primary:
+            axis.plot(time_s[:n_primary], primary[:n_primary], color=color, linewidth=1.4, label="adaptive")
+
+        has_fixed = _has_metric_values(self.metrics.get(fixed_key, []))
+        if has_fixed:
+            fixed = np.asarray(self.metrics.get(fixed_key, []), dtype=np.float64)
+            n_fixed = min(len(time_s), len(fixed))
+            axis.plot(time_s[:n_fixed], fixed[:n_fixed], color="tab:gray", linestyle="--", linewidth=1.2, label="normal")
+            axis.legend(loc="best", fontsize=8, frameon=False)
+
+        self._format_metric_axis(axis, title, ylabel)
+        return has_fixed
 
     def redraw_plots(self) -> None:
         if not self.metrics or not self.metrics.get("Time"):
             self._draw_empty_plots()
             return
-        time_s = self.metrics["Time"]
+        time_s = np.asarray(self.metrics["Time"], dtype=np.float64)
         self.ax_fl.clear()
         self.ax_pen.clear()
-        self.ax_fl.plot(time_s, self.metrics["FL"], color="tab:green", linewidth=1.4)
-        self.ax_pen.plot(time_s, self.metrics["PEN"], color="tab:blue", linewidth=1.4)
+        self.ax_ang.clear()
+        self._plot_metric_series(self.ax_fl, time_s, "FL", "FixedFL", "tab:green", "Fascicle Length", "FL")
+        self._plot_metric_series(self.ax_pen, time_s, "PEN", "FixedPEN", "tab:blue", "Pennation", "PEN (deg)")
+        self._plot_metric_series(self.ax_ang, time_s, "ANG", "FixedANG", "tab:red", "Angle", "ANG (deg)")
         self.fl_cursor = self.ax_fl.axvline(time_s[0], color="black", linewidth=0.9, alpha=0.6)
         self.pen_cursor = self.ax_pen.axvline(time_s[0], color="black", linewidth=0.9, alpha=0.6)
-        self.ax_fl.set_title("Fascicle Length")
-        self.ax_fl.set_xlabel("Time (s)")
-        self.ax_fl.set_ylabel("FL")
-        self.ax_pen.set_title("Pennation")
-        self.ax_pen.set_xlabel("Time (s)")
-        self.ax_pen.set_ylabel("PEN (deg)")
-        self.ax_fl.grid(True, alpha=0.25)
-        self.ax_pen.grid(True, alpha=0.25)
+        self.ang_cursor = self.ax_ang.axvline(time_s[0], color="black", linewidth=0.9, alpha=0.6)
         self.figure.tight_layout()
         self.canvas.draw_idle()
 
@@ -919,6 +1010,8 @@ class StrictUltraTimTrackGUI:
             self.fl_cursor.set_xdata([t, t])
         if self.pen_cursor is not None:
             self.pen_cursor.set_xdata([t, t])
+        if self.ang_cursor is not None:
+            self.ang_cursor.set_xdata([t, t])
         self.canvas.draw_idle()
 
     def update_current_metrics(self, frame_idx: int) -> None:

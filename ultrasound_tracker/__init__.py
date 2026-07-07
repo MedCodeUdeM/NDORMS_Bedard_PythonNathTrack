@@ -74,4 +74,4 @@ __all__ = [
     "select_autonomous_fascicle_seed",
 ]
 
-__version__ = "3.1.0"
+__version__ = "4.0.0"

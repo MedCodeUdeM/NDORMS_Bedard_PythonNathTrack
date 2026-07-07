@@ -1,0 +1,2 @@
+status,reason,video,ground_truth_loaded,strict_output_loaded
+not_validated,missing_tracker_output,/Users/grosbedou/PycharmProjects/NDORMS/data/raw/june29_2.mp4,True,False

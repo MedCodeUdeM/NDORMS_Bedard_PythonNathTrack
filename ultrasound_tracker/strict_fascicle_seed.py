@@ -25,14 +25,16 @@ class FascicleSeedScoringConfig:
     mask_dilation_iterations: int = 3
     target_length_mm: float = 76.0
     length_sigma_mm: float = 8.0
-    weight_mask_support: float = 0.25
-    weight_raw_mask_support: float = 0.15
-    weight_hough: float = 0.03
-    weight_length: float = 0.25
+    weight_mask_support: float = 0.35
+    weight_raw_mask_support: float = 0.18
+    weight_hough: float = 0.05
+    weight_length: float = 0.04
     weight_phi: float = 0.12
     weight_pennation: float = 0.08
-    weight_inside_muscle: float = 0.10
-    weight_boundary: float = 0.02
+    weight_inside_muscle: float = 0.08
+    weight_boundary: float = 0.01
+    hough_branch_score_margin: float = 0.02
+    hough_branch_alpha_tolerance_deg: float = 3.0
 
 
 def normalized_segment_angle(segment: np.ndarray) -> float:
@@ -129,8 +131,8 @@ def score_fascicle_seed_candidate(
     pennation_deep = float(alpha_deg - float(entry["gamma"]))
 
     length_score = float(np.exp(-0.5 * ((length_mm - cfg.target_length_mm) / cfg.length_sigma_mm) ** 2))
-    phi_score = _soft_range_score(phi, 10.0, 45.0)
-    pennation_score = _soft_range_score(pennation_deep, 5.0, 45.0)
+    phi_score = _soft_range_score(abs(phi), 10.0, 45.0)
+    pennation_score = _soft_range_score(abs(pennation_deep), 5.0, 45.0)
 
     x1, y1, x2, y2 = np.asarray(segment, dtype=float).reshape(4)
     outside_px = max(0.0, -min(x1, x2), max(x1, x2) - width, -min(y1, y2), max(y1, y2) - height)
@@ -298,6 +300,48 @@ def cluster_seed_candidates(
     return clustered, clusters
 
 
+def choose_stable_seed_cluster(
+    candidates: pd.DataFrame,
+    clusters: pd.DataFrame,
+    *,
+    config: FascicleSeedScoringConfig | None = None,
+) -> dict:
+    """Choose the seed cluster, preferring a near-tied stable Hough branch."""
+
+    if clusters.empty:
+        raise RuntimeError("No stable fascicle seed candidate cluster found.")
+
+    cfg = config or FascicleSeedScoringConfig()
+    selected_cluster = clusters.iloc[0].to_dict()
+    hough_candidates = candidates[candidates["candidate_source"] == "hough_peak"]
+    if hough_candidates.empty:
+        return selected_cluster
+
+    per_frame_hough = hough_candidates.sort_values("score", ascending=False).groupby("frame", as_index=False).head(1)
+    if int(per_frame_hough["frame"].nunique()) < int(cfg.min_cluster_frame_coverage):
+        return selected_cluster
+
+    hough_alpha = float(per_frame_hough["alpha_deg"].median())
+    if not np.isfinite(hough_alpha):
+        return selected_cluster
+
+    best_score = float(selected_cluster["cluster_score"])
+    close_clusters = clusters[
+        clusters["cluster_score"] >= best_score - float(cfg.hough_branch_score_margin)
+    ].copy()
+    close_clusters["hough_alpha_delta"] = np.abs(close_clusters["median_alpha_deg"] - hough_alpha)
+    hough_branch = close_clusters[
+        close_clusters["hough_alpha_delta"] <= float(cfg.hough_branch_alpha_tolerance_deg)
+    ]
+    if hough_branch.empty:
+        return selected_cluster
+
+    return hough_branch.sort_values(
+        ["cluster_score", "mean_hough_score", "mean_mask_support"],
+        ascending=[False, False, False],
+    ).iloc[0].to_dict()
+
+
 def select_autonomous_fascicle_seed(
     candidates: pd.DataFrame,
     clusters: pd.DataFrame,
@@ -308,7 +352,7 @@ def select_autonomous_fascicle_seed(
 
     if clusters.empty:
         raise RuntimeError("No stable fascicle seed candidate cluster found.")
-    selected_cluster = clusters.iloc[0].to_dict()
+    selected_cluster = choose_stable_seed_cluster(candidates, clusters)
     cluster_members = candidates[candidates["cluster_id"] == selected_cluster["cluster_id"]]
     per_frame_best = cluster_members.sort_values("score", ascending=False).groupby("frame", as_index=False).head(1)
     selected_alpha = float(per_frame_best["alpha_deg"].median())
@@ -327,4 +371,3 @@ def select_autonomous_fascicle_seed(
         "cluster_members": cluster_members,
         "per_frame_best": per_frame_best,
     }
-

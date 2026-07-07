@@ -268,6 +268,225 @@ def rotate_binary_nearest(binary: np.ndarray, angle_degrees: float) -> np.ndarra
     return rotated.astype(bool)
 
 
+def _line_endpoints_for_peak(
+    binary: np.ndarray,
+    theta_degrees: np.ndarray,
+    rho_values: np.ndarray,
+    peak: Tuple[int, int],
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Return one-based line endpoints for one Hough peak."""
+
+    contributing = hough_bin_pixels(binary, theta_degrees, rho_values, peak)
+    yy, xx = np.nonzero(contributing)
+    if len(xx) == 0:
+        return np.full(2, np.nan), np.full(2, np.nan)
+
+    order = np.lexsort((yy, xx))
+    xx = xx[order] + 1
+    yy = yy[order] + 1
+    return np.asarray([xx[0], xx[-1]], dtype=np.float64), np.asarray([yy[0], yy[-1]], dtype=np.float64)
+
+
+def local_maxima_indices(values: np.ndarray, num_peaks: int) -> np.ndarray:
+    """
+    Return strongest one-dimensional local maxima.
+
+    This is the notebook-90 localmax peak source: collapse the Hough accumulator
+    by angle first, then pick local maxima along the angle profile.
+    """
+
+    vals = np.asarray(values, dtype=np.float64).reshape(-1)
+    if vals.size == 0 or num_peaks <= 0:
+        return np.empty(0, dtype=np.int64)
+
+    candidates: list[int] = []
+    for idx, value in enumerate(vals):
+        if not np.isfinite(value):
+            continue
+        left = vals[idx - 1] if idx > 0 and np.isfinite(vals[idx - 1]) else -np.inf
+        right = vals[idx + 1] if idx + 1 < vals.size and np.isfinite(vals[idx + 1]) else -np.inf
+        if value >= left and value >= right:
+            candidates.append(idx)
+
+    if not candidates:
+        return np.empty(0, dtype=np.int64)
+
+    candidates.sort(key=lambda i: (-vals[i], i))
+    return np.asarray(candidates[: int(num_peaks)], dtype=np.int64)
+
+
+def dohough_angle_profile_localmax(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
+    """
+    Variant of :func:`dohough` using angle-profile local maxima as peaks.
+
+    The accumulator, diagonal-bias replacement, radius correction, and weighted
+    median stay MATLAB-style. Only the peak source changes from 2D
+    ``houghpeaks`` suppression to one-dimensional local maxima of
+    ``max(H, axis=rho)``.
+    """
+
+    if isinstance(params, dict):
+        params = DoHoughParams(**params)
+
+    bw = np.asarray(binary).astype(bool)
+    theta = matlab_theta_from_range(params.houghangles, params.angle_range, params.thetares)
+    hmat, theta, rho = matlab_hough_accumulator(bw, theta, params.rhores)
+
+    if (
+        params.replace_diagonal_bias
+        and params.angle_range[0] < 45 < params.angle_range[1]
+        and np.any(theta == 45)
+    ):
+        rot_angle = 20.0
+        rotated = rotate_binary_nearest(bw, rot_angle)
+        replacement_theta = np.asarray([90.0 - (45.0 + rot_angle)])
+        hmat_rot, _, _ = matlab_hough_accumulator(rotated, replacement_theta, params.rhores)
+        hmat[:, theta == 45] = hmat_rot
+
+    gamma = 90.0 - theta
+    radius_correction = ellipse_radius_correction(gamma, params.emask_radius)
+    hmat_corrected = np.rint(hmat / radius_correction[np.newaxis, :])
+    h_by_angle = np.max(hmat_corrected, axis=0) if hmat_corrected.size else np.asarray([])
+
+    peak_cols = local_maxima_indices(h_by_angle, params.npeaks)
+    if len(peak_cols):
+        peak_cols = peak_cols[np.argsort(h_by_angle[peak_cols])[::-1]]
+    peak_rows = (
+        np.asarray([int(np.nanargmax(hmat_corrected[:, col])) for col in peak_cols], dtype=np.int64)
+        if len(peak_cols)
+        else np.empty(0, dtype=np.int64)
+    )
+    peaks = np.column_stack([peak_rows, peak_cols]) if len(peak_cols) else np.empty((0, 2), dtype=np.int64)
+    weights = np.asarray([h_by_angle[col] for col in peak_cols], dtype=np.float64)
+    alphas = np.asarray([gamma[col] for col in peak_cols], dtype=np.float64)
+
+    x_lines = np.full((len(peaks), 2), np.nan, dtype=np.float64)
+    y_lines = np.full((len(peaks), 2), np.nan, dtype=np.float64)
+    for i, peak in enumerate(peaks):
+        x_lines[i], y_lines[i] = _line_endpoints_for_peak(bw, theta, rho, tuple(peak))
+
+    return {
+        "alpha": weighted_median(alphas, weights) if len(alphas) else np.nan,
+        "alphas": alphas,
+        "weights": weights,
+        "h_by_angle": h_by_angle,
+        "hmat": hmat,
+        "hmat_corrected": hmat_corrected,
+        "theta": theta,
+        "rho": rho,
+        "gamma": gamma,
+        "peaks": peaks,
+        "X": x_lines,
+        "Y": y_lines,
+        "peak_source": "angle_profile_localmax",
+    }
+
+
+def candidate_mass_below(
+    alpha: float,
+    alphas: np.ndarray,
+    weights: np.ndarray,
+    margin_degrees: float,
+) -> float:
+    """Return normalized candidate weight at least ``margin_degrees`` below ``alpha``."""
+
+    alpha_arr = np.asarray(alphas, dtype=np.float64).reshape(-1)
+    weight_arr = np.asarray(weights, dtype=np.float64).reshape(-1)
+    n = min(len(alpha_arr), len(weight_arr))
+    if n == 0 or not np.isfinite(alpha):
+        return float("nan")
+
+    alpha_arr = alpha_arr[:n]
+    weight_arr = weight_arr[:n]
+    valid = np.isfinite(alpha_arr) & np.isfinite(weight_arr) & (weight_arr > 0)
+    if not np.any(valid):
+        return float("nan")
+
+    alpha_arr = alpha_arr[valid]
+    weight_arr = weight_arr[valid]
+    total = float(np.sum(weight_arr))
+    if total <= 0:
+        return float("nan")
+
+    return float(np.sum(weight_arr[alpha_arr <= float(alpha) - float(margin_degrees)]) / total)
+
+
+def gap_to_nearest_lower(alpha: float, alphas: np.ndarray) -> float:
+    """Return distance from ``alpha`` to the nearest lower candidate alpha."""
+
+    alpha_arr = np.asarray(alphas, dtype=np.float64).reshape(-1)
+    if alpha_arr.size == 0 or not np.isfinite(alpha):
+        return float("nan")
+    lower = alpha_arr[np.isfinite(alpha_arr) & (alpha_arr < float(alpha))]
+    if lower.size == 0:
+        return float("nan")
+    return float(float(alpha) - np.max(lower))
+
+
+def should_use_localmax_fallback(
+    alpha: float,
+    alphas: np.ndarray,
+    weights: np.ndarray,
+    *,
+    mass_margin_degrees: float = 10.0,
+    min_mass_below: float = 0.25,
+    min_gap_to_lower_degrees: float = 4.0,
+) -> tuple[bool, float, float]:
+    """Return notebook-90 mass/gap detector decision and diagnostics."""
+
+    mass = candidate_mass_below(alpha, alphas, weights, mass_margin_degrees)
+    gap = gap_to_nearest_lower(alpha, alphas)
+    use_fallback = (
+        np.isfinite(mass)
+        and np.isfinite(gap)
+        and mass >= float(min_mass_below)
+        and gap >= float(min_gap_to_lower_degrees)
+    )
+    return bool(use_fallback), float(mass), float(gap)
+
+
+def dohough_with_localmax_fallback(
+    binary: np.ndarray,
+    params: DoHoughParams | dict,
+    *,
+    min_mass_below_10deg: float = 0.25,
+    min_gap_to_lower_deg: float = 4.0,
+) -> dict:
+    """
+    Run baseline ``dohough`` and conditionally replace it with localmax output.
+
+    This promotes notebook 90's best Python-only rule:
+    ``mass_below_10deg >= 0.25 and gap_to_lower_deg >= 4.0``.
+    """
+
+    if isinstance(params, dict):
+        params = DoHoughParams(**params)
+
+    baseline = dohough(binary, params)
+    use_fallback, mass, gap = should_use_localmax_fallback(
+        float(baseline["alpha"]),
+        np.asarray(baseline["alphas"], dtype=np.float64),
+        np.asarray(baseline["weights"], dtype=np.float64),
+        mass_margin_degrees=10.0,
+        min_mass_below=float(min_mass_below_10deg),
+        min_gap_to_lower_degrees=float(min_gap_to_lower_deg),
+    )
+
+    if use_fallback:
+        result = dict(dohough_angle_profile_localmax(binary, params))
+    else:
+        result = dict(baseline)
+
+    result["localmax_fallback_used"] = bool(use_fallback)
+    result["localmax_fallback_mass_below_10deg"] = float(mass)
+    result["localmax_fallback_gap_to_lower_deg"] = float(gap)
+    result["localmax_fallback_min_mass_below_10deg"] = float(min_mass_below_10deg)
+    result["localmax_fallback_min_gap_to_lower_deg"] = float(min_gap_to_lower_deg)
+    result["baseline_alpha"] = float(baseline["alpha"])
+    result["selected_peak_source"] = "angle_profile_localmax" if use_fallback else "houghpeaks"
+    return result
+
+
 def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
     """
     Port of MATLAB ``dohough.m``.
@@ -305,15 +524,7 @@ def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
     x_lines = np.full((len(peaks), 2), np.nan, dtype=np.float64)
     y_lines = np.full((len(peaks), 2), np.nan, dtype=np.float64)
     for i, peak in enumerate(peaks):
-        contributing = hough_bin_pixels(bw, theta, rho, tuple(peak))
-        yy, xx = np.nonzero(contributing)
-        if len(xx) == 0:
-            continue
-        order = np.lexsort((yy, xx))
-        xx = xx[order] + 1
-        yy = yy[order] + 1
-        x_lines[i] = [xx[0], xx[-1]]
-        y_lines[i] = [yy[0], yy[-1]]
+        x_lines[i], y_lines[i] = _line_endpoints_for_peak(bw, theta, rho, tuple(peak))
 
     return {
         "alpha": weighted_median(alphas, weights) if len(alphas) else np.nan,
@@ -328,6 +539,7 @@ def dohough(binary: np.ndarray, params: DoHoughParams | dict) -> dict:
         "peaks": peaks,
         "X": x_lines,
         "Y": y_lines,
+        "peak_source": "houghpeaks",
     }
 
 

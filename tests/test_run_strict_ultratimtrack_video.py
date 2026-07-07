@@ -4,11 +4,15 @@ from scripts.run_strict_ultratimtrack_video import (
     FascicleCandidatePersistenceConfig,
     apply_aponeurosis_maxangle_overrides,
     apply_fascicle_angle_overrides,
+    candidate_signed_fascicle_angle_ranges,
+    current_fascicle_angle_range,
     draw_overlay_frame,
+    fascicle_angle_abs_bounds,
     kalman_comparison_rows,
     kalman_mode_uses_confidence,
     prompt_kalman_mode,
     run_fascicle_kalman_mode,
+    select_best_fascicle_angle_range_result,
     select_fascicle_candidate_persistence,
 )
 from ultrasound_tracker.ultratimtrack_matlab_2state import MatlabTwoStateKalmanConfig
@@ -72,6 +76,46 @@ def test_fascicle_angle_override_updates_timtrack_range():
     np.testing.assert_allclose(parms["fas"]["range"], [5.0, 55.0])
 
 
+def test_fascicle_angle_auto_candidates_include_reverse_signed_range():
+    parms = {"fas": {"range": np.array([5.0, 60.0])}}
+
+    assert current_fascicle_angle_range(parms) == (5.0, 60.0)
+    assert fascicle_angle_abs_bounds(parms) == (5.0, 60.0)
+    assert candidate_signed_fascicle_angle_ranges(parms) == [(5.0, 60.0), (-60.0, -5.0)]
+
+
+def test_fascicle_angle_auto_candidates_preserve_negative_current_range_first():
+    parms = {"fas": {"range": np.array([-50.0, -10.0])}}
+
+    assert current_fascicle_angle_range(parms) == (-50.0, -10.0)
+    assert fascicle_angle_abs_bounds(parms) == (10.0, 50.0)
+    assert candidate_signed_fascicle_angle_ranges(parms) == [(-50.0, -10.0), (10.0, 50.0)]
+
+
+def test_fascicle_angle_auto_near_tie_prefers_positive_orientation():
+    scored = [
+        {"angle_min_deg": -60.0, "angle_max_deg": -5.0, "score": 0.9716},
+        {"angle_min_deg": 5.0, "angle_max_deg": 60.0, "score": 0.9651},
+    ]
+
+    best = select_best_fascicle_angle_range_result(scored)
+
+    assert best["angle_min_deg"] == 5.0
+    assert best["angle_max_deg"] == 60.0
+
+
+def test_fascicle_angle_auto_keeps_clear_negative_winner():
+    scored = [
+        {"angle_min_deg": -60.0, "angle_max_deg": -5.0, "score": 0.98},
+        {"angle_min_deg": 5.0, "angle_max_deg": 60.0, "score": 0.93},
+    ]
+
+    best = select_best_fascicle_angle_range_result(scored)
+
+    assert best["angle_min_deg"] == -60.0
+    assert best["angle_max_deg"] == -5.0
+
+
 def test_candidate_persistence_prefers_near_previous_candidate_on_raw_jump():
     geofeatures = [
         {
@@ -127,6 +171,39 @@ def test_candidate_persistence_disabled_keeps_raw_alpha_but_writes_rows():
     assert not bool(out["raw_alpha_rejected"][0])
     assert len(out["candidate_rows"]) == 2
     assert len(out["selection_rows"]) == 1
+
+
+def test_candidate_persistence_handles_reverse_negative_angle_range():
+    geofeatures = [
+        {
+            "alphas": np.array([-20.0]),
+            "weights": np.array([1.0]),
+            "x": np.array([[1.0, 20.0]]),
+            "y": np.array([[40.0, 10.0]]),
+        },
+        {
+            "alphas": np.array([-21.0, -40.0]),
+            "weights": np.array([0.8, 1.0]),
+            "x": np.array([[1.0, 20.0], [1.0, 20.0]]),
+            "y": np.array([[42.0, 11.0], [80.0, 10.0]]),
+        },
+    ]
+
+    out = select_fascicle_candidate_persistence(
+        geofeatures,
+        np.array([-20.0, -40.0]),
+        config=FascicleCandidatePersistenceConfig(
+            enabled=True,
+            angle_min_deg=-60.0,
+            angle_max_deg=-5.0,
+            max_angle_step_deg=5.0,
+            hough_weight_bonus_deg=2.0,
+        ),
+    )
+
+    np.testing.assert_allclose(out["selected_alpha_deg"], [-20.0, -21.0])
+    assert out["selected_candidate_idx"][1] == 0
+    assert bool(out["raw_alpha_rejected"][1])
 
 
 def test_overlay_can_draw_fixed_red_and_adaptive_blue():
