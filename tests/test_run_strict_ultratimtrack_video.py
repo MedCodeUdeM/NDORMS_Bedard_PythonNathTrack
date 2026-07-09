@@ -11,6 +11,7 @@ from scripts.run_strict_ultratimtrack_video import (
     kalman_comparison_rows,
     kalman_mode_uses_confidence,
     prompt_kalman_mode,
+    resolve_measurement_pixel_scale,
     run_fascicle_kalman_mode,
     select_best_fascicle_angle_range_result,
     select_fascicle_candidate_persistence,
@@ -90,6 +91,45 @@ def test_fascicle_angle_auto_candidates_preserve_negative_current_range_first():
     assert current_fascicle_angle_range(parms) == (-50.0, -10.0)
     assert fascicle_angle_abs_bounds(parms) == (10.0, 50.0)
     assert candidate_signed_fascicle_angle_ranges(parms) == [(-50.0, -10.0), (10.0, 50.0)]
+
+
+def test_user_image_depth_controls_measurement_scale_without_seed_scale():
+    scale = resolve_measurement_pixel_scale(
+        {"ID": 50.7},
+        image_height_px=800,
+        mm_per_pixel=None,
+        image_depth_mm=69.0,
+    )
+
+    assert np.isclose(scale["measurement_mm_per_pixel"], 69.0 / 800.0)
+    assert scale["measurement_scale_source"] == "entered_image_depth_mm"
+    assert scale["matlab_export_image_depth_mm"] == 50.7
+    assert "seed_mm_per_pixel" not in scale
+
+
+def test_measurement_scale_does_not_fall_back_to_matlab_depth():
+    scale = resolve_measurement_pixel_scale(
+        {"ID": 50.7},
+        image_height_px=800,
+        mm_per_pixel=None,
+        image_depth_mm=None,
+    )
+
+    assert np.isnan(scale["measurement_mm_per_pixel"])
+    assert scale["measurement_scale_source"] == "missing"
+    assert scale["matlab_export_image_depth_mm"] == 50.7
+
+
+def test_direct_mm_per_pixel_overrides_image_depth_for_measurements():
+    scale = resolve_measurement_pixel_scale(
+        {},
+        image_height_px=800,
+        mm_per_pixel=0.12,
+        image_depth_mm=69.0,
+    )
+
+    assert np.isclose(scale["measurement_mm_per_pixel"], 0.12)
+    assert scale["measurement_scale_source"] == "direct_mm_per_pixel"
 
 
 def test_fascicle_angle_auto_near_tie_prefers_positive_orientation():

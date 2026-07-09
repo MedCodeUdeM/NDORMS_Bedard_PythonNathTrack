@@ -1,4 +1,15 @@
-from scripts.strict_ultratimtrack_gui import _has_metric_values, _read_metrics_csv
+import zipfile
+
+import numpy as np
+import pytest
+
+from scripts.strict_ultratimtrack_gui import (
+    _has_metric_values,
+    _match_speckle_point_with_fb,
+    _read_metrics_csv,
+    _speckle_config_from_box,
+    _write_simple_xlsx,
+)
 
 
 def test_read_metrics_csv_loads_fixed_kalman_comparison_columns(tmp_path):
@@ -34,3 +45,41 @@ def test_read_metrics_csv_keeps_fixed_columns_empty_when_not_comparing(tmp_path)
     assert metrics["FL"] == [22.0]
     assert metrics["FixedFL"] == []
     assert not _has_metric_values(metrics["FixedFL"])
+
+
+def test_speckle_patch_matcher_recovers_known_shift():
+    rng = np.random.default_rng(123)
+    frame0 = rng.normal(100.0, 25.0, (80, 80)).astype(np.float32)
+    frame1 = np.zeros_like(frame0)
+    frame1[2:, 3:] = frame0[:-2, :-3]
+    cfg = _speckle_config_from_box(21)
+
+    match = _match_speckle_point_with_fb(frame0, frame1, np.asarray([40.0, 40.0]), cfg)
+
+    assert match["ok"]
+    assert np.allclose(match["point"], [43.0, 42.0])
+    assert match["zncc"] > 0.99
+
+
+def test_speckle_config_rejects_even_box_size():
+    with pytest.raises(ValueError, match="odd"):
+        _speckle_config_from_box(40)
+
+
+def test_write_simple_xlsx_creates_workbook(tmp_path):
+    output = tmp_path / "tracking.xlsx"
+    _write_simple_xlsx(
+        output,
+        {
+            "tracking": [{"frame": 0, "point_id": "center", "valid": True, "d_parallel_mm": 1.25}],
+            "summary": [{"mean_zncc": 0.98}],
+        },
+    )
+
+    with zipfile.ZipFile(output) as zf:
+        names = set(zf.namelist())
+        workbook = zf.read("xl/workbook.xml").decode("utf-8")
+
+    assert "[Content_Types].xml" in names
+    assert "xl/worksheets/sheet1.xml" in names
+    assert 'name="tracking"' in workbook

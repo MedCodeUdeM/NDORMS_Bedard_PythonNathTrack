@@ -49,6 +49,38 @@ def test_score_fascicle_seed_candidate_returns_finite_score():
     assert scores["score"] > 0.0
     assert scores["mask_support_score"] == 1.0
     assert scores["inside_muscle_score"] > 0.9
+    assert scores["length_px"] > 0.0
+
+
+def test_seed_scoring_is_independent_of_pixel_to_mm_scale():
+    entry = _entry()
+    segment = fascicle_segment_from_aponeuroses_and_alpha(
+        entry["super_coef"],
+        entry["deep_coef"],
+        17.5,
+        120,
+        super_coef_linear_1b=entry["super_coef_linear"],
+        deep_coef_linear_1b=entry["deep_coef_linear"],
+    )
+
+    matlab_depth_score = score_fascicle_seed_candidate(
+        entry,
+        segment,
+        17.5,
+        mm_per_px=50.7 / 800.0,
+        frame_shape=(80, 120),
+    )
+    entered_depth_score = score_fascicle_seed_candidate(
+        entry,
+        segment,
+        17.5,
+        mm_per_px=69.0 / 800.0,
+        frame_shape=(80, 120),
+    )
+
+    assert matlab_depth_score["length_mm"] != entered_depth_score["length_mm"]
+    assert matlab_depth_score["length_score"] == entered_depth_score["length_score"]
+    assert matlab_depth_score["score"] == entered_depth_score["score"]
 
 
 def test_seed_scoring_prefers_mask_supported_segment_over_stale_length_prior():

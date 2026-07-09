@@ -94,6 +94,53 @@ LEGACY_UTT_EXPORT = Path("/Users/grosbedou/Documents/GitHub/UltraTimTrack/UTT_nu
 AUTO_ORIENTATION_SIGN_TIE_TOL = 0.02
 
 
+def finite_positive_float(value: Any) -> float | None:
+    """Return ``value`` as a positive finite float, or ``None`` if unavailable."""
+
+    try:
+        scalar = float(np.asarray(value, dtype=np.float64).reshape(-1)[0])
+    except Exception:
+        return None
+    if np.isfinite(scalar) and scalar > 0:
+        return scalar
+    return None
+
+
+def resolve_measurement_pixel_scale(
+    mat_root: Mapping[str, Any],
+    *,
+    image_height_px: int,
+    mm_per_pixel: float | None,
+    image_depth_mm: float | None,
+) -> dict[str, float | str | None]:
+    """Resolve the user-controlled measurement pixel scale.
+
+    The autonomous fascicle seed selector is depth-independent. This scale is
+    only used after detection to report lengths/displacements in millimetres.
+    """
+
+    height = float(image_height_px)
+    matlab_image_depth_mm = finite_positive_float(mat_root.get("ID"))
+    direct_mm_per_px = finite_positive_float(mm_per_pixel)
+    entered_depth_mm = finite_positive_float(image_depth_mm)
+    if direct_mm_per_px is not None:
+        measurement_mm_per_px = float(direct_mm_per_px)
+        measurement_scale_source = "direct_mm_per_pixel"
+    elif entered_depth_mm is not None:
+        measurement_mm_per_px = float(entered_depth_mm) / height
+        measurement_scale_source = "entered_image_depth_mm"
+    else:
+        measurement_mm_per_px = float("nan")
+        measurement_scale_source = "missing"
+
+    return {
+        "mm_per_pixel": measurement_mm_per_px,
+        "measurement_mm_per_pixel": measurement_mm_per_px,
+        "measurement_scale_source": measurement_scale_source,
+        "matlab_export_image_depth_mm": matlab_image_depth_mm,
+    }
+
+
 @dataclass(frozen=True)
 class FascicleCandidatePersistenceConfig:
     """Frame-to-frame fascicle candidate persistence settings."""
@@ -407,7 +454,7 @@ def score_fascicle_angle_range(
     *,
     angle_min_deg: float,
     angle_max_deg: float,
-    mm_per_px: float,
+    mm_per_px: float | None = None,
     hough_localmax_fallback: bool = False,
     hough_fallback_min_mass_below_10deg: float = 0.25,
     hough_fallback_min_gap_to_lower_deg: float = 4.0,
@@ -458,7 +505,7 @@ def choose_fascicle_angle_range_from_seed_frames(
     seed_frames: Sequence[np.ndarray],
     parms: Mapping,
     *,
-    mm_per_px: float,
+    mm_per_px: float | None = None,
     hough_localmax_fallback: bool = False,
     hough_fallback_min_mass_below_10deg: float = 0.25,
     hough_fallback_min_gap_to_lower_deg: float = 4.0,
@@ -1505,6 +1552,10 @@ def parse_args() -> argparse.Namespace:
         parser.error("--hough-fallback-min-gap-to-lower-deg must be non-negative.")
     if args.apo_gate_max_rejections < 0:
         parser.error("--apo-gate-max-rejections must be non-negative.")
+    if args.mm_per_pixel is not None and args.mm_per_pixel <= 0:
+        parser.error("--mm-per-pixel must be positive.")
+    if args.image_depth_mm is not None and args.image_depth_mm <= 0:
+        parser.error("--image-depth-mm must be positive.")
 
     if args.kalman_mode is None:
         args.kalman_mode = "adaptive-anisotropic" if args.adaptive_r else "fixed"
@@ -1596,17 +1647,27 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         deep_apo_maxangle=args.deep_apo_maxangle,
     )
 
-    if args.mm_per_pixel is not None:
-        mm_per_px = float(args.mm_per_pixel)
-    elif args.image_depth_mm is not None:
-        mm_per_px = float(args.image_depth_mm) / float(frame0.shape[0])
-    elif "ID" in mat_root and np.isfinite(float(mat_root["ID"])):
-        mm_per_px = float(mat_root["ID"]) / float(frame0.shape[0])
-    else:
-        mm_per_px = np.nan
+    pixel_scale = resolve_measurement_pixel_scale(
+        mat_root,
+        image_height_px=int(frame0.shape[0]),
+        mm_per_pixel=args.mm_per_pixel,
+        image_depth_mm=args.image_depth_mm,
+    )
+    mm_per_px = float(pixel_scale["measurement_mm_per_pixel"])
+    measurement_scale_source = str(pixel_scale["measurement_scale_source"])
+    matlab_image_depth_mm = pixel_scale["matlab_export_image_depth_mm"]
+    print(
+        "\nPixel scale: "
+        f"measurements={mm_per_px:.8g} mm/px ({measurement_scale_source}); "
+        "fascicle seed selection uses pixel/image evidence only"
+    )
 
     seed_frame_count = min(int(args.seed_frames), n_limit)
     seed_frames = read_gray_frames(args.video, seed_frame_count)
+    print(
+        f"Using {len(seed_frames)} seed frame(s) for autonomous fascicle choice "
+        f"(requested {int(args.seed_frames)})."
+    )
     seed_entries: list[dict[str, Any]] | None = None
     seed_config: FascicleSeedScoringConfig | None = None
     candidates = None
@@ -1626,7 +1687,6 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         fas_angle_auto_result = choose_fascicle_angle_range_from_seed_frames(
             seed_frames,
             parms,
-            mm_per_px=mm_per_px,
             hough_localmax_fallback=bool(args.hough_localmax_fallback),
             hough_fallback_min_mass_below_10deg=float(args.hough_fallback_min_mass_below_10deg),
             hough_fallback_min_gap_to_lower_deg=float(args.hough_fallback_min_gap_to_lower_deg),
@@ -1711,7 +1771,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             angle_min_deg=fas_angle_min,
             angle_max_deg=fas_angle_max,
         )
-        candidates = extract_fascicle_seed_candidates(seed_entries, seed_frames, mm_per_px=mm_per_px, config=seed_config)
+        candidates = extract_fascicle_seed_candidates(
+            seed_entries,
+            seed_frames,
+            config=seed_config,
+        )
         candidates, clusters = cluster_seed_candidates(candidates, min_frame_coverage=seed_config.min_cluster_frame_coverage)
     else:
         print("Using preflight seed detections for selected fascicle angle range.")
@@ -1889,6 +1953,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "selected_seed_segment": selected_seed,
         "selected_seed_alpha_deg": np.asarray(selected_alpha, dtype=np.float64),
         "mm_per_pixel": np.asarray(mm_per_px, dtype=np.float64),
+        "measurement_mm_per_pixel": np.asarray(mm_per_px, dtype=np.float64),
         "apo_measurement_states": np.asarray(apo_state["measurement_states"], dtype=np.float64),
         "apo_accepted_measurement_states": np.asarray(apo_state["accepted_measurement_states"], dtype=np.float64),
         "apo_gating_r_scale": np.asarray(apo_state["gating_r_scale"], dtype=np.float64),
@@ -2081,6 +2146,10 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         ),
         "seed_angle_min_deg": float(seed_config.angle_min_deg),
         "seed_angle_max_deg": float(seed_config.angle_max_deg),
+        "seed_frames_requested": int(args.seed_frames),
+        "seed_frames_used": int(seed_frame_count),
+        "seed_selection_scale_source": "pixel_image_evidence",
+        "seed_length_prior": "disabled_depth_independent",
         "hough_localmax_fallback": bool(args.hough_localmax_fallback),
         "hough_fallback_min_mass_below_10deg": float(args.hough_fallback_min_mass_below_10deg),
         "hough_fallback_min_gap_to_lower_deg": float(args.hough_fallback_min_gap_to_lower_deg),
@@ -2105,6 +2174,9 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "frames": int(len(frames)),
         "fps": fps,
         "mm_per_pixel": mm_per_px,
+        "measurement_mm_per_pixel": mm_per_px,
+        "measurement_scale_source": measurement_scale_source,
+        "matlab_export_image_depth_mm": matlab_image_depth_mm,
         "selected_seed_alpha_deg": selected_alpha,
         "selected_seed_segment": selected_seed.tolist(),
         "selected_cluster_id": selected_cluster,

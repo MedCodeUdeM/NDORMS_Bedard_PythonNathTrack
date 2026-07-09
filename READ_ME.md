@@ -33,4 +33,5 @@ aponeurosis gating, and adaptive anisotropic Kalman with normal Kalman saved as
 a comparison.
 
 If you type fascicle angles manually, the GUI uses your fields and disables the
-auto-orientation choice for that run.
+auto-orientation choice for that run..
+se
