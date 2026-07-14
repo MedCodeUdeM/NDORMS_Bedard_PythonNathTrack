@@ -2,7 +2,7 @@
 
 Legacy prototypes are available from :mod:`ultrasound_tracker.legacy`, but they
 are intentionally not re-exported here.  This keeps ``import ultrasound_tracker``
-focused on the supported MATLAB-compatible tracking path.
+focused on the supported MATLAB-like tracking path.
 """
 
 from . import geometry, roi
@@ -74,4 +74,4 @@ __all__ = [
     "select_autonomous_fascicle_seed",
 ]
 
-__version__ = "5.0.0"
+__version__ = "6.0.0"
