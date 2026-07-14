@@ -7,7 +7,7 @@ This module provides core geometric calculations for:
   - Point transformations (line projection, perpendicular distance)
   - Filtering and batch operations
 
-Ported from MATLAB UltraTimTrack by Tim van der Zee.
+Inspired from MATLAB UltraTimTrack by Tim van der Zee.
 Convention: angle = atan2(-dy, dx)  →  matches MATLAB atan2d(-dy, dx)
 """
 

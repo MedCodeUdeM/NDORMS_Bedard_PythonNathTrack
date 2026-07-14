@@ -20,6 +20,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from .geometry import line_angles_batch, line_lengths_batch, normalize_angle
+from .ultratrack_klt import apply_affine_1b
 
 
 IDX_X_SUP = 0
@@ -61,6 +62,17 @@ def _as_optional_scale(values: Optional[np.ndarray], name: str, n: int) -> np.nd
     return np.clip(arr, np.finfo(float).eps, np.inf)
 
 
+def _as_optional_affines(values: Optional[np.ndarray], name: str, n: int) -> Optional[np.ndarray]:
+    if values is None:
+        return None
+    arr = np.asarray(values, dtype=np.float64)
+    if arr.ndim != 3 or arr.shape[1:] != (2, 3):
+        raise ValueError(f"{name} must have shape (n_frames, 2, 3).")
+    if len(arr) != n:
+        raise ValueError(f"{name} must have length {n}, got {len(arr)}.")
+    return arr
+
+
 def _line_coefficients(line: np.ndarray) -> Tuple[float, float]:
     x1, y1, x2, y2 = np.asarray(line, dtype=np.float64)
     dx = x2 - x1
@@ -74,6 +86,10 @@ def _line_coefficients(line: np.ndarray) -> Tuple[float, float]:
 def _normalized_segment_angles(segments: np.ndarray) -> np.ndarray:
     angles = line_angles_batch(np.asarray(segments, dtype=np.float64), degrees=True)
     return np.asarray([normalize_angle(angle, degrees=True) for angle in angles], dtype=np.float64)
+
+
+def _segment_angle_deg(segment: np.ndarray) -> float:
+    return float(_normalized_segment_angles(np.asarray(segment, dtype=np.float64).reshape(1, 4))[0])
 
 
 def matlab_scalar_kalman_update(
@@ -196,6 +212,7 @@ def run_matlab_2state_kalman(
     measurement_r_scale: Optional[np.ndarray] = None,
     measurement_r_scale_theta: Optional[np.ndarray] = None,
     measurement_r_scale_length: Optional[np.ndarray] = None,
+    prediction_affine_matrices: Optional[np.ndarray] = None,
 ) -> Dict[str, np.ndarray]:
     """
     Run a MATLAB-like 2-state forward filter plus optional RTS-style smoother.
@@ -220,21 +237,28 @@ def run_matlab_2state_kalman(
         order remains MATLAB-compatible ``[x_sup, alpha]``, so the stored
         ``measurement_R_diag`` is ``[R_L, R_theta]`` even though the conceptual
         measurement covariance is ``diag([R_theta, R_L])``.
+    prediction_affine_matrices:
+        Optional per-frame one-based affine matrices, typically from the
+        persistent KLT tracker. When provided, the forward predictor applies
+        frame ``f``'s affine to the previous corrected fascicle segment before
+        forming ``X_minus``. This is closer to MATLAB production behavior than
+        raw segment-to-segment deltas.
 
     Notes
     -----
-    MATLAB predicts the state by applying saved affine warps to the previous
-    corrected state.  Those MATLAB ``affine2d`` objects are not available from
-    SciPy because they are MCOS opaque objects.  This compatibility path uses
-    the raw KLT segment-to-segment delta as the prediction input, which is the
-    practical quantity available to the Python pipeline and validation
-    notebooks.
+    If ``prediction_affine_matrices`` is omitted, this compatibility path falls
+    back to the older raw KLT segment-to-segment delta predictor.
     """
     klt = _as_segments(klt_segments, "klt_segments")
     n = len(klt)
     tim_alpha = _as_1d(timtrack_alpha_deg, "timtrack_alpha_deg", n)
     superficial = _as_segments(superficial_apo_lines, "superficial_apo_lines")
     deep = _as_segments(deep_apo_lines, "deep_apo_lines")
+    prediction_affines = _as_optional_affines(
+        prediction_affine_matrices,
+        "prediction_affine_matrices",
+        n,
+    )
     if len(superficial) != n or len(deep) != n:
         raise ValueError("aponeurosis line arrays must match klt_segments length.")
 
@@ -271,6 +295,9 @@ def run_matlab_2state_kalman(
     p_plus = np.full((n, STATE_SIZE), np.nan, dtype=np.float64)
     p_minus = np.full((n, STATE_SIZE), np.nan, dtype=np.float64)
     gains = np.full((n, STATE_SIZE), np.nan, dtype=np.float64)
+    predicted_segments = np.full((n, 4), np.nan, dtype=np.float64)
+    previous_corrected_segments = np.full((n, 4), np.nan, dtype=np.float64)
+    prediction_used_affine = np.zeros(n, dtype=bool)
 
     alpha0 = klt_alpha[:n_start]
     states_plus[0] = [klt[0, 0], float(np.nanmean(alpha0))]
@@ -279,14 +306,50 @@ def run_matlab_2state_kalman(
     p_plus[0] = [0.0, alpha_var]
     states_minus[0] = states_plus[0]
     p_minus[0] = p_plus[0]
+    previous_corrected_segments[0], _ = reconstruct_fascicle_from_state(
+        states_plus[0, IDX_X_SUP],
+        states_plus[0, IDX_ALPHA],
+        superficial[0],
+        deep[0],
+        fixed_y,
+    )
+    predicted_segments[0] = previous_corrected_segments[0]
 
     for frame in range(1, n):
-        dx_sup = klt[frame, 0] - klt[frame - 1, 0]
-        dy_sup = klt[frame, 1] - klt[frame - 1, 1]
-        x_prior = states_plus[frame - 1, IDX_X_SUP] + dx_sup
+        previous_corrected_segments[frame - 1], _ = reconstruct_fascicle_from_state(
+            states_plus[frame - 1, IDX_X_SUP],
+            states_plus[frame - 1, IDX_ALPHA],
+            superficial[frame - 1],
+            deep[frame - 1],
+            fixed_y,
+        )
 
-        d_alpha = abs(klt_alpha[frame]) - abs(klt_alpha[frame - 1])
-        alpha_prior = states_plus[frame - 1, IDX_ALPHA] + d_alpha
+        use_affine_prediction = (
+            prediction_affines is not None
+            and np.all(np.isfinite(prediction_affines[frame]))
+            and np.all(np.isfinite(previous_corrected_segments[frame - 1]))
+        )
+        if use_affine_prediction:
+            predicted_segment = apply_affine_1b(previous_corrected_segments[frame - 1], prediction_affines[frame])
+            predicted_segments[frame] = predicted_segment
+            prediction_used_affine[frame] = True
+            dx_sup = float(predicted_segment[0] - previous_corrected_segments[frame - 1, 0])
+            dy_sup = float(predicted_segment[1] - previous_corrected_segments[frame - 1, 1])
+            x_prior = float(predicted_segment[0])
+            predicted_alpha = _segment_angle_deg(predicted_segment)
+            previous_alpha = _segment_angle_deg(previous_corrected_segments[frame - 1])
+            d_alpha = abs(predicted_alpha) - abs(previous_alpha)
+            alpha_prior = states_plus[frame - 1, IDX_ALPHA] + d_alpha
+        else:
+            dx_sup = klt[frame, 0] - klt[frame - 1, 0]
+            dy_sup = klt[frame, 1] - klt[frame - 1, 1]
+            x_prior = states_plus[frame - 1, IDX_X_SUP] + dx_sup
+            d_alpha = abs(klt_alpha[frame]) - abs(klt_alpha[frame - 1])
+            alpha_prior = states_plus[frame - 1, IDX_ALPHA] + d_alpha
+            predicted_segments[frame] = np.asarray(
+                [x_prior, fixed_y, klt[frame, 2], klt[frame, 3]],
+                dtype=np.float64,
+            )
 
         dx = float(np.hypot(dx_sup, dy_sup))
         q_x = float(cfg.q_parameter) * dx * dx
@@ -299,7 +362,7 @@ def run_matlab_2state_kalman(
             x_prior,
             p_plus[frame - 1, IDX_X_SUP],
             q_x,
-            klt[0, 0],
+            klt[frame, 0],
             measurement_R_diag[frame, IDX_X_SUP],
         )
         states_minus[frame, IDX_X_SUP] = x_prior
@@ -321,6 +384,14 @@ def run_matlab_2state_kalman(
             measurement_R_diag[frame, IDX_ALPHA],
         )
         states_minus[frame, IDX_ALPHA] = alpha_prior
+
+    previous_corrected_segments[-1], _ = reconstruct_fascicle_from_state(
+        states_plus[-1, IDX_X_SUP],
+        states_plus[-1, IDX_ALPHA],
+        superficial[-1],
+        deep[-1],
+        fixed_y,
+    )
 
     outputs_forward = _compute_outputs(
         states_plus,
@@ -361,8 +432,10 @@ def run_matlab_2state_kalman(
 
     result: Dict[str, np.ndarray] = {
         "X_plus": states_smooth,
+        "X_smooth": states_smooth,
         "X_minus": states_minus,
         "fas_p": p_smooth,
+        "fas_p_smooth": p_smooth,
         "fas_p_minus": p_minus,
         "kalman_gain": gains,
         "smoother_gain": smoother_gain,
@@ -374,6 +447,9 @@ def run_matlab_2state_kalman(
         "use_adaptive_R": np.asarray(bool(cfg.use_adaptive_R)),
         "forward_X_plus": states_plus,
         "forward_fas_p": p_plus,
+        "predicted_segments": predicted_segments,
+        "previous_corrected_segments": previous_corrected_segments,
+        "prediction_used_affine": prediction_used_affine,
         "forward_fascicle_segments": outputs_forward["fascicle_segments"],
         "forward_fascicle_end_segments": outputs_forward["fascicle_end_segments"],
         "forward_ANG_deg": outputs_forward["ANG_deg"],

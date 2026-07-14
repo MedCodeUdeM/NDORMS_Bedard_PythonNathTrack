@@ -1,5 +1,0 @@
-gate,status,ready_for_next
-image-derived saved full-sequence TimTrack peak stream,fails saved full-sequence MATLAB geofeature parity,False
-Python-geofeature masks with one-step KLT handoff,angle and length pass,True
-image TimTrack + py masks + MATLAB KLT prior + 2-state Kalman,final FL/PEN/ANG pass,True
-strict image TimTrack prior + py apo + 2-state Kalman,diagnostic variant fails,False

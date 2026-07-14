@@ -23,16 +23,16 @@ class FascicleSeedScoringConfig:
     top_peak_limit: int = 10
     min_cluster_frame_coverage: int = 8
     mask_dilation_iterations: int = 3
-    target_length_mm: float = 76.0
-    length_sigma_mm: float = 8.0
-    weight_mask_support: float = 0.25
-    weight_raw_mask_support: float = 0.15
-    weight_hough: float = 0.03
-    weight_length: float = 0.25
+    weight_mask_support: float = 0.35
+    weight_raw_mask_support: float = 0.18
+    weight_hough: float = 0.05
+    weight_lateral_span: float = 0.12
     weight_phi: float = 0.12
     weight_pennation: float = 0.08
-    weight_inside_muscle: float = 0.10
-    weight_boundary: float = 0.02
+    weight_inside_muscle: float = 0.08
+    weight_boundary: float = 0.01
+    hough_branch_score_margin: float = 0.02
+    hough_branch_alpha_tolerance_deg: float = 3.0
 
 
 def normalized_segment_angle(segment: np.ndarray) -> float:
@@ -82,16 +82,22 @@ def score_fascicle_seed_candidate(
     segment: np.ndarray,
     alpha_deg: float,
     *,
-    mm_per_px: float,
+    mm_per_px: float | None = None,
     frame_shape: tuple[int, int],
     config: FascicleSeedScoringConfig | None = None,
 ) -> dict[str, float]:
-    """Score one autonomous fascicle seed candidate using Python-only evidence."""
+    """Score one autonomous fascicle seed candidate using depth-independent evidence."""
 
     cfg = config or FascicleSeedScoringConfig()
     height, width = map(int, frame_shape)
     mask = np.asarray(entry["fascicle_masked"], dtype=bool)
     dilated = binary_dilation(mask, iterations=int(cfg.mask_dilation_iterations))
+    length_px = float(line_lengths_batch(np.asarray(segment, dtype=float).reshape(1, 4))[0])
+    try:
+        mm_scale = float(mm_per_px) if mm_per_px is not None else np.nan
+    except (TypeError, ValueError):
+        mm_scale = np.nan
+    length_mm = float(length_px * mm_scale) if np.isfinite(mm_scale) and mm_scale > 0 else float("nan")
 
     xs, ys = sample_segment_points(segment)
     xi = np.rint(xs).astype(int) - 1
@@ -108,6 +114,9 @@ def score_fascicle_seed_candidate(
             "visible_fraction": visible_fraction,
             "hough_score": hough_score,
             "length_score": 0.0,
+            "lateral_span_score": 0.0,
+            "length_px": length_px,
+            "length_mm": length_mm,
             "phi_score": 0.0,
             "pennation_score": 0.0,
             "boundary_score": 0.0,
@@ -118,19 +127,21 @@ def score_fascicle_seed_candidate(
 
     x_1b = xi[in_bounds].astype(float) + 1.0
     y_1b = yi[in_bounds].astype(float) + 1.0
+    lateral_span_score = float(np.clip((float(np.nanmax(x_1b) - np.nanmin(x_1b)) + 1.0) / float(width), 0.0, 1.0))
     super_y = np.polyval(np.asarray(entry["super_coef"], dtype=float), x_1b)
     deep_y = np.polyval(np.asarray(entry["deep_coef"], dtype=float), x_1b)
     inside_muscle = float(
         ((y_1b >= np.minimum(super_y, deep_y) - 2.0) & (y_1b <= np.maximum(super_y, deep_y) + 2.0)).mean()
     )
 
-    length_mm = float(line_lengths_batch(np.asarray(segment, dtype=float).reshape(1, 4))[0] * float(mm_per_px))
     phi = float(alpha_deg - float(entry["betha"]))
     pennation_deep = float(alpha_deg - float(entry["gamma"]))
 
-    length_score = float(np.exp(-0.5 * ((length_mm - cfg.target_length_mm) / cfg.length_sigma_mm) ** 2))
-    phi_score = _soft_range_score(phi, 10.0, 45.0)
-    pennation_score = _soft_range_score(pennation_deep, 5.0, 45.0)
+    # A physical-length prior makes the selected fascicle depend on image depth.
+    # Keep a neutral diagnostic score here and let mask/Hough/geometry evidence decide.
+    length_score = 1.0
+    phi_score = _soft_range_score(abs(phi), 10.0, 45.0)
+    pennation_score = _soft_range_score(abs(pennation_deep), 5.0, 45.0)
 
     x1, y1, x2, y2 = np.asarray(segment, dtype=float).reshape(4)
     outside_px = max(0.0, -min(x1, x2), max(x1, x2) - width, -min(y1, y2), max(y1, y2) - height)
@@ -140,7 +151,7 @@ def score_fascicle_seed_candidate(
         cfg.weight_mask_support * mask_support
         + cfg.weight_raw_mask_support * raw_support
         + cfg.weight_hough * hough_score
-        + cfg.weight_length * length_score
+        + cfg.weight_lateral_span * lateral_span_score
         + cfg.weight_phi * phi_score
         + cfg.weight_pennation * pennation_score
         + cfg.weight_inside_muscle * inside_muscle
@@ -155,9 +166,11 @@ def score_fascicle_seed_candidate(
         "visible_fraction": visible_fraction,
         "hough_score": hough_score,
         "length_score": length_score,
+        "lateral_span_score": lateral_span_score,
         "phi_score": phi_score,
         "pennation_score": pennation_score,
         "boundary_score": boundary_score,
+        "length_px": length_px,
         "length_mm": length_mm,
         "phi_deg": phi,
         "pennation_deep_deg": pennation_deep,
@@ -169,7 +182,7 @@ def extract_fascicle_seed_candidates(
     entries: Sequence[Mapping],
     frames: Sequence[np.ndarray],
     *,
-    mm_per_px: float,
+    mm_per_px: float | None = None,
     config: FascicleSeedScoringConfig | None = None,
     angle_grid: np.ndarray | None = None,
 ) -> pd.DataFrame:
@@ -245,22 +258,34 @@ def cluster_seed_candidates(
     *,
     min_frame_coverage: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Cluster candidates by angle, position, and length and score stability."""
+    """Cluster candidates by angle, position, and pixel length and score stability."""
 
     if candidates.empty:
         return candidates.copy(), pd.DataFrame()
 
     min_coverage = int(min_frame_coverage or FascicleSeedScoringConfig().min_cluster_frame_coverage)
     clustered = candidates.copy()
+    if "length_px" not in clustered:
+        required = {"x_sup", "y_sup", "x_deep", "y_deep"}
+        if required.issubset(clustered.columns):
+            clustered["length_px"] = np.hypot(
+                clustered["x_deep"] - clustered["x_sup"],
+                clustered["y_deep"] - clustered["y_sup"],
+            )
+        else:
+            clustered["length_px"] = np.nan
+    if "length_mm" not in clustered:
+        clustered["length_mm"] = np.nan
     clustered["alpha_bin"] = np.round(clustered["alpha_deg"] / 0.25) * 0.25
     clustered["xmid_bin"] = np.round(clustered["x_mid"] / 50.0) * 50.0
-    clustered["length_bin"] = np.round(clustered["length_mm"] / 5.0) * 5.0
+    clustered["length_bin_px"] = np.round(clustered["length_px"] / 50.0) * 50.0
+    clustered["length_bin"] = clustered["length_bin_px"]
     clustered["cluster_id"] = (
         clustered["alpha_bin"].map(lambda x: f"a{x:.2f}")
         + "_x"
         + clustered["xmid_bin"].map(lambda x: f"{x:.0f}")
-        + "_l"
-        + clustered["length_bin"].map(lambda x: f"{x:.0f}")
+        + "_lp"
+        + clustered["length_bin_px"].map(lambda x: f"{x:.0f}")
     )
 
     rows: list[dict] = []
@@ -269,11 +294,14 @@ def cluster_seed_candidates(
         if coverage < min_coverage:
             continue
         per_frame_best = group.sort_values("score", ascending=False).groupby("frame", as_index=False).head(1)
+        length_std_px = float(per_frame_best["length_px"].std(ddof=0))
+        if not np.isfinite(length_std_px):
+            length_std_px = 0.0
         cluster_score = (
             float(per_frame_best["score"].mean())
             + 0.04 * coverage
             - 0.02 * float(per_frame_best["alpha_deg"].std(ddof=0))
-            - 0.01 * float(per_frame_best["length_mm"].std(ddof=0))
+            - 0.000125 * length_std_px
         )
         rows.append(
             {
@@ -284,18 +312,63 @@ def cluster_seed_candidates(
                 "mean_score": float(per_frame_best["score"].mean()),
                 "median_alpha_deg": float(per_frame_best["alpha_deg"].median()),
                 "alpha_std_deg": float(per_frame_best["alpha_deg"].std(ddof=0)),
+                "median_length_px": float(per_frame_best["length_px"].median()),
+                "length_std_px": length_std_px,
                 "median_length_mm": float(per_frame_best["length_mm"].median()),
                 "length_std_mm": float(per_frame_best["length_mm"].std(ddof=0)),
                 "median_x_mid": float(per_frame_best["x_mid"].median()),
                 "x_mid_std": float(per_frame_best["x_mid"].std(ddof=0)),
                 "mean_mask_support": float(per_frame_best["mask_support_score"].mean()),
                 "mean_hough_score": float(per_frame_best["hough_score"].mean()),
+                "mean_lateral_span_score": float(per_frame_best["lateral_span_score"].mean()),
                 "hough_peak_fraction": float((per_frame_best["candidate_source"] == "hough_peak").mean()),
             }
         )
 
     clusters = pd.DataFrame(rows).sort_values("cluster_score", ascending=False).reset_index(drop=True)
     return clustered, clusters
+
+
+def choose_stable_seed_cluster(
+    candidates: pd.DataFrame,
+    clusters: pd.DataFrame,
+    *,
+    config: FascicleSeedScoringConfig | None = None,
+) -> dict:
+    """Choose the seed cluster, preferring a near-tied stable Hough branch."""
+
+    if clusters.empty:
+        raise RuntimeError("No stable fascicle seed candidate cluster found.")
+
+    cfg = config or FascicleSeedScoringConfig()
+    selected_cluster = clusters.iloc[0].to_dict()
+    hough_candidates = candidates[candidates["candidate_source"] == "hough_peak"]
+    if hough_candidates.empty:
+        return selected_cluster
+
+    per_frame_hough = hough_candidates.sort_values("score", ascending=False).groupby("frame", as_index=False).head(1)
+    if int(per_frame_hough["frame"].nunique()) < int(cfg.min_cluster_frame_coverage):
+        return selected_cluster
+
+    hough_alpha = float(per_frame_hough["alpha_deg"].median())
+    if not np.isfinite(hough_alpha):
+        return selected_cluster
+
+    best_score = float(selected_cluster["cluster_score"])
+    close_clusters = clusters[
+        clusters["cluster_score"] >= best_score - float(cfg.hough_branch_score_margin)
+    ].copy()
+    close_clusters["hough_alpha_delta"] = np.abs(close_clusters["median_alpha_deg"] - hough_alpha)
+    hough_branch = close_clusters[
+        close_clusters["hough_alpha_delta"] <= float(cfg.hough_branch_alpha_tolerance_deg)
+    ]
+    if hough_branch.empty:
+        return selected_cluster
+
+    return hough_branch.sort_values(
+        ["cluster_score", "mean_hough_score", "mean_mask_support"],
+        ascending=[False, False, False],
+    ).iloc[0].to_dict()
 
 
 def select_autonomous_fascicle_seed(
@@ -308,7 +381,7 @@ def select_autonomous_fascicle_seed(
 
     if clusters.empty:
         raise RuntimeError("No stable fascicle seed candidate cluster found.")
-    selected_cluster = clusters.iloc[0].to_dict()
+    selected_cluster = choose_stable_seed_cluster(candidates, clusters)
     cluster_members = candidates[candidates["cluster_id"] == selected_cluster["cluster_id"]]
     per_frame_best = cluster_members.sort_values("score", ascending=False).groupby("frame", as_index=False).head(1)
     selected_alpha = float(per_frame_best["alpha_deg"].median())
@@ -327,4 +400,3 @@ def select_autonomous_fascicle_seed(
         "cluster_members": cluster_members,
         "per_frame_best": per_frame_best,
     }
-

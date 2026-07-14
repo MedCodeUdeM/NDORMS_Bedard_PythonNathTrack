@@ -9,7 +9,7 @@ Interactive:
 Command-line:
     python scripts/run_strict_ultratimtrack_video.py data/raw/UltraTimTrack_test.mp4 \
         --roi-path data/rois/UltraTimTrack_test_rois.json \
-        --utt-export /Users/grosbedou/Documents/GitHub/UltraTimTrack/UTT_numeric_export.mat
+        --utt-export data/matlab/UTT_numeric_export.mat
 """
 
 from __future__ import annotations
@@ -54,7 +54,6 @@ import ultrasound_tracker.utils as ut
 from ultrasound_tracker.matlab_aponeurosis import make_matlab_apox
 from ultrasound_tracker.matlab_timtrack import (
     detect_timtrack_geofeature_from_image,
-    fascicle_segment_from_geofeature,
     run_timtrack_geofeatures_from_video,
 )
 from ultrasound_tracker.speckle_confidence import (
@@ -76,8 +75,7 @@ from ultrasound_tracker.strict_fascicle_seed import (
 )
 from ultrasound_tracker.ultratrack_klt import (
     UltraTrackKLTConfig,
-    propagate_cumulative_affines,
-    run_one_step_affine_video,
+    run_persistent_affine_video,
 )
 from ultrasound_tracker.ultratimtrack_aponeurosis import (
     AponeurosisGatingConfig,
@@ -91,6 +89,56 @@ from ultrasound_tracker.ultratimtrack_matlab_2state import (
 
 VIDEO_EXTENSIONS = [".avi", ".AVI", ".mp4", ".MP4", ".mov", ".MOV", ".mkv", ".MKV"]
 KALMAN_MODES = ("fixed", "adaptive-scalar", "adaptive-anisotropic")
+DEFAULT_UTT_EXPORT = PROJECT_ROOT / "data" / "matlab" / "UTT_numeric_export.mat"
+LEGACY_UTT_EXPORT = Path("/Users/grosbedou/Documents/GitHub/UltraTimTrack/UTT_numeric_export.mat")
+AUTO_ORIENTATION_SIGN_TIE_TOL = 0.02
+
+
+def finite_positive_float(value: Any) -> float | None:
+    """Return ``value`` as a positive finite float, or ``None`` if unavailable."""
+
+    try:
+        scalar = float(np.asarray(value, dtype=np.float64).reshape(-1)[0])
+    except Exception:
+        return None
+    if np.isfinite(scalar) and scalar > 0:
+        return scalar
+    return None
+
+
+def resolve_measurement_pixel_scale(
+    mat_root: Mapping[str, Any],
+    *,
+    image_height_px: int,
+    mm_per_pixel: float | None,
+    image_depth_mm: float | None,
+) -> dict[str, float | str | None]:
+    """Resolve the user-controlled measurement pixel scale.
+
+    The autonomous fascicle seed selector is depth-independent. This scale is
+    only used after detection to report lengths/displacements in millimetres.
+    """
+
+    height = float(image_height_px)
+    matlab_image_depth_mm = finite_positive_float(mat_root.get("ID"))
+    direct_mm_per_px = finite_positive_float(mm_per_pixel)
+    entered_depth_mm = finite_positive_float(image_depth_mm)
+    if direct_mm_per_px is not None:
+        measurement_mm_per_px = float(direct_mm_per_px)
+        measurement_scale_source = "direct_mm_per_pixel"
+    elif entered_depth_mm is not None:
+        measurement_mm_per_px = float(entered_depth_mm) / height
+        measurement_scale_source = "entered_image_depth_mm"
+    else:
+        measurement_mm_per_px = float("nan")
+        measurement_scale_source = "missing"
+
+    return {
+        "mm_per_pixel": measurement_mm_per_px,
+        "measurement_mm_per_pixel": measurement_mm_per_px,
+        "measurement_scale_source": measurement_scale_source,
+        "matlab_export_image_depth_mm": matlab_image_depth_mm,
+    }
 
 
 @dataclass(frozen=True)
@@ -326,6 +374,238 @@ def apply_fascicle_angle_overrides(
         raise ValueError("Fascicle angle range must be finite with min < max.")
     fas["range"] = np.asarray([low, high], dtype=np.float64)
     return parms
+
+
+def current_fascicle_angle_range(parms: Mapping) -> tuple[float, float]:
+    """Return the configured TimTrack fascicle angle range."""
+
+    fas = parms.get("fas", {}) if isinstance(parms, Mapping) else {}
+    current = np.asarray(fas.get("range", [5.0, 60.0]), dtype=np.float64).reshape(-1)
+    if current.size < 2:
+        current = np.asarray([5.0, 60.0], dtype=np.float64)
+    low = float(current[0])
+    high = float(current[1])
+    if not np.isfinite(low) or not np.isfinite(high) or low >= high:
+        return 5.0, 60.0
+    return low, high
+
+
+def fascicle_angle_abs_bounds(parms: Mapping) -> tuple[float, float]:
+    """Return positive angle magnitudes used to test both fascicle orientations."""
+
+    low, high = current_fascicle_angle_range(parms)
+    magnitudes = np.abs(np.asarray([low, high], dtype=np.float64))
+    magnitudes = magnitudes[np.isfinite(magnitudes) & (magnitudes > 0)]
+    if magnitudes.size < 2:
+        return 5.0, 60.0
+    low_abs = float(np.min(magnitudes))
+    high_abs = float(np.max(magnitudes))
+    if low_abs >= high_abs:
+        return 5.0, 60.0
+    return low_abs, high_abs
+
+
+def candidate_signed_fascicle_angle_ranges(parms: Mapping) -> list[tuple[float, float]]:
+    """Return positive and reverse-signed versions of the configured fascicle range."""
+
+    current_low, current_high = current_fascicle_angle_range(parms)
+    low_abs, high_abs = fascicle_angle_abs_bounds(parms)
+    positive = (low_abs, high_abs)
+    reverse = (-high_abs, -low_abs)
+    ordered = [reverse, positive] if current_high <= 0 else [positive, reverse]
+    ranges: list[tuple[float, float]] = []
+    for low, high in ordered:
+        pair = (float(low), float(high))
+        if pair not in ranges:
+            ranges.append(pair)
+    if (current_low, current_high) not in ranges and current_low < current_high:
+        ranges.insert(0, (current_low, current_high))
+    return ranges
+
+
+def detect_seed_geofeature_entries(
+    seed_frames: Sequence[np.ndarray],
+    parms: Mapping,
+    *,
+    hough_localmax_fallback: bool = False,
+    hough_fallback_min_mass_below_10deg: float = 0.25,
+    hough_fallback_min_gap_to_lower_deg: float = 4.0,
+) -> list[dict[str, Any]]:
+    """Run the TimTrack image detector on the frames used for seed selection."""
+
+    entries: list[dict[str, Any]] = []
+    for idx, gray in enumerate(seed_frames):
+        entry = detect_timtrack_geofeature_from_image(
+            gray,
+            parms,
+            emask_mode="matlab",
+            hough_localmax_fallback=bool(hough_localmax_fallback),
+            hough_fallback_min_mass_below_10deg=float(hough_fallback_min_mass_below_10deg),
+            hough_fallback_min_gap_to_lower_deg=float(hough_fallback_min_gap_to_lower_deg),
+        )
+        entry["frame"] = idx
+        entries.append(entry)
+    return entries
+
+
+def score_fascicle_angle_range(
+    seed_frames: Sequence[np.ndarray],
+    parms: Mapping,
+    *,
+    angle_min_deg: float,
+    angle_max_deg: float,
+    mm_per_px: float | None = None,
+    hough_localmax_fallback: bool = False,
+    hough_fallback_min_mass_below_10deg: float = 0.25,
+    hough_fallback_min_gap_to_lower_deg: float = 4.0,
+) -> dict[str, Any]:
+    """Score one signed fascicle angle range from early-frame seed stability."""
+
+    test_parms = apply_fascicle_angle_overrides(
+        copy.deepcopy(dict(parms)),
+        fas_angle_min=float(angle_min_deg),
+        fas_angle_max=float(angle_max_deg),
+    )
+    seed_entries = detect_seed_geofeature_entries(
+        seed_frames,
+        test_parms,
+        hough_localmax_fallback=bool(hough_localmax_fallback),
+        hough_fallback_min_mass_below_10deg=float(hough_fallback_min_mass_below_10deg),
+        hough_fallback_min_gap_to_lower_deg=float(hough_fallback_min_gap_to_lower_deg),
+    )
+    seed_config = replace(
+        FascicleSeedScoringConfig(min_cluster_frame_coverage=min(8, len(seed_frames))),
+        angle_min_deg=float(angle_min_deg),
+        angle_max_deg=float(angle_max_deg),
+    )
+    candidates = extract_fascicle_seed_candidates(seed_entries, seed_frames, mm_per_px=mm_per_px, config=seed_config)
+    candidates, clusters = cluster_seed_candidates(candidates, min_frame_coverage=seed_config.min_cluster_frame_coverage)
+    if clusters.empty:
+        score = -np.inf
+        top_cluster: dict[str, Any] = {}
+    else:
+        top_cluster = clusters.iloc[0].to_dict()
+        score = float(top_cluster["cluster_score"])
+
+    return {
+        "angle_min_deg": float(angle_min_deg),
+        "angle_max_deg": float(angle_max_deg),
+        "score": score,
+        "top_cluster": top_cluster,
+        "parms": test_parms,
+        "seed_entries": seed_entries,
+        "seed_config": seed_config,
+        "candidates": candidates,
+        "clusters": clusters,
+        "error": None,
+    }
+
+
+def choose_fascicle_angle_range_from_seed_frames(
+    seed_frames: Sequence[np.ndarray],
+    parms: Mapping,
+    *,
+    mm_per_px: float | None = None,
+    hough_localmax_fallback: bool = False,
+    hough_fallback_min_mass_below_10deg: float = 0.25,
+    hough_fallback_min_gap_to_lower_deg: float = 4.0,
+) -> dict[str, Any]:
+    """Select the signed fascicle angle range with the best stable seed cluster."""
+
+    scored: list[dict[str, Any]] = []
+    for angle_min, angle_max in candidate_signed_fascicle_angle_ranges(parms):
+        try:
+            result = score_fascicle_angle_range(
+                seed_frames,
+                parms,
+                angle_min_deg=angle_min,
+                angle_max_deg=angle_max,
+                mm_per_px=mm_per_px,
+                hough_localmax_fallback=bool(hough_localmax_fallback),
+                hough_fallback_min_mass_below_10deg=float(hough_fallback_min_mass_below_10deg),
+                hough_fallback_min_gap_to_lower_deg=float(hough_fallback_min_gap_to_lower_deg),
+            )
+        except Exception as exc:  # pragma: no cover - diagnostic path for unexpected detector failures.
+            result = {
+                "angle_min_deg": float(angle_min),
+                "angle_max_deg": float(angle_max),
+                "score": -np.inf,
+                "top_cluster": {},
+                "parms": None,
+                "seed_entries": None,
+                "seed_config": None,
+                "candidates": None,
+                "clusters": None,
+                "error": str(exc),
+            }
+        scored.append(result)
+
+    best = select_best_fascicle_angle_range_result(scored)
+    return {
+        "selected": bool(best and np.isfinite(float(best.get("score", -np.inf)))),
+        "best": best,
+        "candidates": scored,
+    }
+
+
+def select_best_fascicle_angle_range_result(
+    scored: Sequence[Mapping[str, Any]],
+    *,
+    positive_tie_tolerance: float = AUTO_ORIENTATION_SIGN_TIE_TOL,
+) -> Mapping[str, Any]:
+    """Return the best auto-orientation result, preferring positive angles in near-ties."""
+
+    ranked = sorted(
+        scored,
+        key=lambda item: float(item["score"]) if np.isfinite(float(item["score"])) else -np.inf,
+        reverse=True,
+    )
+    if not ranked:
+        return {}
+
+    best = ranked[0]
+    best_score = float(best.get("score", -np.inf))
+    positive = [
+        item
+        for item in ranked
+        if float(item.get("angle_min_deg", np.nan)) > 0.0 and float(item.get("angle_max_deg", np.nan)) > 0.0
+    ]
+    if not positive or not np.isfinite(best_score):
+        return best
+
+    best_positive = positive[0]
+    positive_score = float(best_positive.get("score", -np.inf))
+    if np.isfinite(positive_score) and positive_score >= best_score - float(positive_tie_tolerance):
+        return best_positive
+    return best
+
+
+def fascicle_angle_auto_diagnostics(auto_result: Mapping[str, Any], selected_range: tuple[float, float]) -> list[dict[str, Any]]:
+    """Build JSON-safe diagnostics for fascicle angle auto-selection."""
+
+    rows: list[dict[str, Any]] = []
+    for item in auto_result.get("candidates", []):
+        score = float(item.get("score", np.nan))
+        top_cluster = item.get("top_cluster", {}) or {}
+        angle_min = float(item.get("angle_min_deg", np.nan))
+        angle_max = float(item.get("angle_max_deg", np.nan))
+        rows.append(
+            {
+                "angle_min_deg": angle_min,
+                "angle_max_deg": angle_max,
+                "selected": bool(np.isclose(angle_min, selected_range[0]) and np.isclose(angle_max, selected_range[1])),
+                "score": score if np.isfinite(score) else None,
+                "cluster_id": str(top_cluster.get("cluster_id", "")),
+                "frame_coverage": int(top_cluster.get("frame_coverage", 0) or 0),
+                "median_alpha_deg": (
+                    float(top_cluster["median_alpha_deg"])
+                    if "median_alpha_deg" in top_cluster and np.isfinite(float(top_cluster["median_alpha_deg"]))
+                    else None
+                ),
+                "error": item.get("error"),
+            }
+        )
+    return rows
 
 
 def geofeature_measurement_lines(geofeatures: list[Mapping], width: int) -> tuple[np.ndarray, np.ndarray]:
@@ -790,6 +1070,7 @@ def run_fascicle_kalman_mode(
     deep_lines: np.ndarray,
     kalman_config: MatlabTwoStateKalmanConfig,
     *,
+    prediction_affine_matrices: np.ndarray | None = None,
     confidence_arrays: Mapping[str, np.ndarray] | None = None,
     mm_per_pixel: float | None = None,
 ) -> dict[str, np.ndarray]:
@@ -819,8 +1100,50 @@ def run_fascicle_kalman_mode(
         deep_lines,
         config=kalman_run_config,
         mm_per_pixel=mm_per_pixel,
+        prediction_affine_matrices=prediction_affine_matrices,
         **kwargs,
     )
+
+
+def add_kalman_state_arrays(
+    arrays: dict[str, np.ndarray],
+    result: Mapping[str, np.ndarray],
+    *,
+    prefix: str = "",
+) -> None:
+    """Save parity-friendly internal Kalman arrays into the output bundle."""
+
+    def save(key: str, source_key: str | None = None) -> None:
+        value = result.get(source_key or key)
+        if value is not None:
+            arrays[f"{prefix}{key}"] = np.asarray(value)
+
+    for key in [
+        "X_plus",
+        "X_smooth",
+        "X_minus",
+        "fas_p",
+        "fas_p_smooth",
+        "fas_p_minus",
+        "forward_X_plus",
+        "forward_fas_p",
+        "kalman_gain",
+        "smoother_gain",
+        "measurement_R_diag",
+        "measurement_r_scale",
+        "measurement_r_scale_theta",
+        "measurement_r_scale_length",
+        "predicted_segments",
+        "previous_corrected_segments",
+        "prediction_used_affine",
+        "forward_fascicle_segments",
+        "forward_fascicle_end_segments",
+        "forward_ANG_deg",
+        "forward_PEN_deg",
+        "forward_FL_px",
+        "forward_FL_mm",
+    ]:
+        save(key)
 
 
 def _finite_delta_stats(estimate: np.ndarray, reference: np.ndarray) -> dict[str, float | int]:
@@ -1069,7 +1392,7 @@ def save_confidence_plot(path: Path, arrays: Mapping[str, np.ndarray]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    default_export = Path("/Users/grosbedou/Documents/GitHub/UltraTimTrack/UTT_numeric_export.mat")
+    default_export = DEFAULT_UTT_EXPORT if DEFAULT_UTT_EXPORT.exists() else LEGACY_UTT_EXPORT
     parser = argparse.ArgumentParser(description="Run strict Python UltraTimTrack and write an annotated video.")
     parser.add_argument("video", nargs="?", type=Path, default=None, help="Video path. Omit with --interactive.")
     parser.add_argument("--interactive", action="store_true", help="Choose video and ROI interactively.")
@@ -1105,6 +1428,39 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed-frames", type=int, default=11, help="Frames used for autonomous seed selection.")
     parser.add_argument("--fas-angle-min", type=float, default=None, help="Override minimum fascicle Hough/seed angle.")
     parser.add_argument("--fas-angle-max", type=float, default=None, help="Override maximum fascicle Hough/seed angle.")
+    parser.add_argument(
+        "--fas-angle-auto",
+        dest="fas_angle_auto",
+        action="store_true",
+        default=True,
+        help="Automatically choose positive or reverse-signed fascicle angle range from seed frames.",
+    )
+    parser.add_argument(
+        "--no-fas-angle-auto",
+        dest="fas_angle_auto",
+        action="store_false",
+        help="Disable automatic positive/reverse fascicle angle range selection.",
+    )
+    parser.add_argument(
+        "--hough-localmax-fallback",
+        action="store_true",
+        help=(
+            "On mass/gap flagged frames, replace MATLAB-style 2D houghpeaks with "
+            "angle-profile localmax Hough output."
+        ),
+    )
+    parser.add_argument(
+        "--hough-fallback-min-mass-below-10deg",
+        type=float,
+        default=0.25,
+        help="Minimum normalized mass below alpha-10 deg for --hough-localmax-fallback.",
+    )
+    parser.add_argument(
+        "--hough-fallback-min-gap-to-lower-deg",
+        type=float,
+        default=4.0,
+        help="Minimum gap to nearest lower candidate for --hough-localmax-fallback.",
+    )
     parser.add_argument(
         "--candidate-persistence",
         action="store_true",
@@ -1186,10 +1542,20 @@ def parse_args() -> argparse.Namespace:
     compare_from_cli = bool(args.compare_to_fixed_kalman or annotate_comparison_from_cli)
     if args.fas_angle_min is not None and args.fas_angle_max is not None and args.fas_angle_min >= args.fas_angle_max:
         parser.error("--fas-angle-min must be smaller than --fas-angle-max.")
+    if args.seed_frames <= 0:
+        parser.error("--seed-frames must be positive.")
     if args.max_angle_step <= 0:
         parser.error("--max-angle-step must be positive.")
+    if args.hough_fallback_min_mass_below_10deg < 0:
+        parser.error("--hough-fallback-min-mass-below-10deg must be non-negative.")
+    if args.hough_fallback_min_gap_to_lower_deg < 0:
+        parser.error("--hough-fallback-min-gap-to-lower-deg must be non-negative.")
     if args.apo_gate_max_rejections < 0:
         parser.error("--apo-gate-max-rejections must be non-negative.")
+    if args.mm_per_pixel is not None and args.mm_per_pixel <= 0:
+        parser.error("--mm-per-pixel must be positive.")
+    if args.image_depth_mm is not None and args.image_depth_mm <= 0:
+        parser.error("--image-depth-mm must be positive.")
 
     if args.kalman_mode is None:
         args.kalman_mode = "adaptive-anisotropic" if args.adaptive_r else "fixed"
@@ -1280,25 +1646,71 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         super_apo_maxangle=args.super_apo_maxangle,
         deep_apo_maxangle=args.deep_apo_maxangle,
     )
-    parms = apply_fascicle_angle_overrides(
-        parms,
-        fas_angle_min=args.fas_angle_min,
-        fas_angle_max=args.fas_angle_max,
-    )
-    fas_range = np.asarray(parms.get("fas", {}).get("range", [5.0, 60.0]), dtype=np.float64).reshape(-1)
-    if fas_range.size < 2:
-        fas_range = np.asarray([5.0, 60.0], dtype=np.float64)
-    fas_angle_min = float(fas_range[0])
-    fas_angle_max = float(fas_range[1])
 
-    if args.mm_per_pixel is not None:
-        mm_per_px = float(args.mm_per_pixel)
-    elif args.image_depth_mm is not None:
-        mm_per_px = float(args.image_depth_mm) / float(frame0.shape[0])
-    elif "ID" in mat_root and np.isfinite(float(mat_root["ID"])):
-        mm_per_px = float(mat_root["ID"]) / float(frame0.shape[0])
-    else:
-        mm_per_px = np.nan
+    pixel_scale = resolve_measurement_pixel_scale(
+        mat_root,
+        image_height_px=int(frame0.shape[0]),
+        mm_per_pixel=args.mm_per_pixel,
+        image_depth_mm=args.image_depth_mm,
+    )
+    mm_per_px = float(pixel_scale["measurement_mm_per_pixel"])
+    measurement_scale_source = str(pixel_scale["measurement_scale_source"])
+    matlab_image_depth_mm = pixel_scale["matlab_export_image_depth_mm"]
+    print(
+        "\nPixel scale: "
+        f"measurements={mm_per_px:.8g} mm/px ({measurement_scale_source}); "
+        "fascicle seed selection uses pixel/image evidence only"
+    )
+
+    seed_frame_count = min(int(args.seed_frames), n_limit)
+    seed_frames = read_gray_frames(args.video, seed_frame_count)
+    print(
+        f"Using {len(seed_frames)} seed frame(s) for autonomous fascicle choice "
+        f"(requested {int(args.seed_frames)})."
+    )
+    seed_entries: list[dict[str, Any]] | None = None
+    seed_config: FascicleSeedScoringConfig | None = None
+    candidates = None
+    clusters = None
+    fas_angle_auto_result: dict[str, Any] | None = None
+    fas_angle_auto_applied = False
+    manual_fas_angle_override = args.fas_angle_min is not None or args.fas_angle_max is not None
+
+    if manual_fas_angle_override:
+        parms = apply_fascicle_angle_overrides(
+            parms,
+            fas_angle_min=args.fas_angle_min,
+            fas_angle_max=args.fas_angle_max,
+        )
+    elif args.fas_angle_auto:
+        print("\nDetecting fascicle angle orientation from seed frames...")
+        fas_angle_auto_result = choose_fascicle_angle_range_from_seed_frames(
+            seed_frames,
+            parms,
+            hough_localmax_fallback=bool(args.hough_localmax_fallback),
+            hough_fallback_min_mass_below_10deg=float(args.hough_fallback_min_mass_below_10deg),
+            hough_fallback_min_gap_to_lower_deg=float(args.hough_fallback_min_gap_to_lower_deg),
+        )
+        if fas_angle_auto_result["selected"]:
+            best = fas_angle_auto_result["best"]
+            parms = best["parms"]
+            seed_entries = best["seed_entries"]
+            seed_config = best["seed_config"]
+            candidates = best["candidates"]
+            clusters = best["clusters"]
+            fas_angle_auto_applied = True
+            top_cluster = best.get("top_cluster", {}) or {}
+            cluster_id = str(top_cluster.get("cluster_id", ""))
+            cluster_score = float(best["score"])
+            print(
+                "Auto-selected fascicle angle range: "
+                f"{float(best['angle_min_deg']):.3f} to {float(best['angle_max_deg']):.3f} deg "
+                f"(orientation score {cluster_score:.3f}, preflight cluster {cluster_id})"
+            )
+        else:
+            print("Fascicle angle auto-selection found no stable seed cluster; keeping exported range.")
+
+    fas_angle_min, fas_angle_max = current_fascicle_angle_range(parms)
 
     block_size = np.asarray(mat_root.get("BlockSize", [81, 81]), dtype=int).reshape(-1)
     win_size = (int(block_size[-1]), int(block_size[0])) if block_size.size >= 2 else (81, 81)
@@ -1318,33 +1730,55 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print("\nRunning TimTrack image stream...")
+    print(f"Using fascicle angle range: {fas_angle_min:.3f} to {fas_angle_max:.3f} deg")
+    if args.hough_localmax_fallback:
+        print(
+            "Using conditional Hough localmax fallback: "
+            f"mass_below_10deg >= {args.hough_fallback_min_mass_below_10deg:g}, "
+            f"gap_to_lower_deg >= {args.hough_fallback_min_gap_to_lower_deg:g}"
+        )
     geofeatures = run_timtrack_geofeatures_from_video(
         str(args.video),
         parms,
         limit=n_limit,
         keep_debug=False,
         emask_mode="matlab",
+        hough_localmax_fallback=bool(args.hough_localmax_fallback),
+        hough_fallback_min_mass_below_10deg=float(args.hough_fallback_min_mass_below_10deg),
+        hough_fallback_min_gap_to_lower_deg=float(args.hough_fallback_min_gap_to_lower_deg),
         progress_every=args.progress_every,
     )
     n = len(geofeatures)
     if n <= 1:
         raise RuntimeError("TimTrack stream produced too few frames.")
+    if len(seed_frames) > n:
+        seed_frames = seed_frames[:n]
+        seed_frame_count = len(seed_frames)
+        if seed_entries is not None:
+            seed_entries = seed_entries[:n]
 
     print("\nSelecting autonomous fascicle seed...")
-    seed_frame_count = min(int(args.seed_frames), n)
-    seed_frames = read_gray_frames(args.video, seed_frame_count)
-    seed_entries = []
-    for idx, gray in enumerate(seed_frames):
-        entry = detect_timtrack_geofeature_from_image(gray, parms, emask_mode="matlab")
-        entry["frame"] = idx
-        seed_entries.append(entry)
-    seed_config = replace(
-        FascicleSeedScoringConfig(min_cluster_frame_coverage=min(8, seed_frame_count)),
-        angle_min_deg=fas_angle_min,
-        angle_max_deg=fas_angle_max,
-    )
-    candidates = extract_fascicle_seed_candidates(seed_entries, seed_frames, mm_per_px=mm_per_px, config=seed_config)
-    candidates, clusters = cluster_seed_candidates(candidates, min_frame_coverage=seed_config.min_cluster_frame_coverage)
+    if seed_entries is None or seed_config is None or candidates is None or clusters is None:
+        seed_entries = detect_seed_geofeature_entries(
+            seed_frames,
+            parms,
+            hough_localmax_fallback=bool(args.hough_localmax_fallback),
+            hough_fallback_min_mass_below_10deg=float(args.hough_fallback_min_mass_below_10deg),
+            hough_fallback_min_gap_to_lower_deg=float(args.hough_fallback_min_gap_to_lower_deg),
+        )
+        seed_config = replace(
+            FascicleSeedScoringConfig(min_cluster_frame_coverage=min(8, seed_frame_count)),
+            angle_min_deg=fas_angle_min,
+            angle_max_deg=fas_angle_max,
+        )
+        candidates = extract_fascicle_seed_candidates(
+            seed_entries,
+            seed_frames,
+            config=seed_config,
+        )
+        candidates, clusters = cluster_seed_candidates(candidates, min_frame_coverage=seed_config.min_cluster_frame_coverage)
+    else:
+        print("Using preflight seed detections for selected fascicle angle range.")
     selection = select_autonomous_fascicle_seed(candidates, clusters, seed_entries[0], frame0.shape[1])
     selected_seed = np.asarray(selection["selected_seed_segment"], dtype=np.float64)
     selected_alpha = float(selection["selected_alpha_deg"])
@@ -1355,18 +1789,17 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     clusters.to_csv(run_dir / f"{args.name}_seed_clusters.csv", index=False)
     selection["per_frame_best"].to_csv(run_dir / f"{args.name}_selected_seed_cluster.csv", index=False)
 
-    print("\nEstimating fascicle KLT affines...")
-    reference_segments = np.asarray([fascicle_segment_from_geofeature(entry) for entry in geofeatures], dtype=np.float64)
-    klt = run_one_step_affine_video(
+    print("\nEstimating fascicle KLT affines with persistent tracker state...")
+    klt = run_persistent_affine_video(
         args.video,
         geofeatures,
-        reference_segments,
+        selected_seed,
         super_cut=np.asarray(parms["apo"]["super"]["cut"], dtype=float).reshape(-1),
         config=klt_config,
         limit=n,
         progress_every=args.progress_every,
     )
-    fascicle_prior = propagate_cumulative_affines(selected_seed, np.asarray(klt["f_affine_matrices"], dtype=float))
+    fascicle_prior = np.asarray(klt["fascicle_segments"], dtype=np.float64)
 
     print("\nRunning aponeurosis state estimator...")
     sup_meas, deep_meas = geofeature_measurement_lines(geofeatures, frame0.shape[1])
@@ -1396,6 +1829,28 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
     )
 
     timtrack_alpha_raw = geofeature_alpha(geofeatures)
+    hough_fallback_used = np.asarray(
+        [bool(entry.get("hough_localmax_fallback_used", False)) for entry in geofeatures],
+        dtype=bool,
+    )
+    hough_fallback_mass = np.asarray(
+        [float(entry.get("hough_localmax_fallback_mass_below_10deg", np.nan)) for entry in geofeatures],
+        dtype=np.float64,
+    )
+    hough_fallback_gap = np.asarray(
+        [float(entry.get("hough_localmax_fallback_gap_to_lower_deg", np.nan)) for entry in geofeatures],
+        dtype=np.float64,
+    )
+    hough_baseline_alpha = np.asarray(
+        [float(entry.get("hough_baseline_alpha_deg", np.nan)) for entry in geofeatures],
+        dtype=np.float64,
+    )
+    hough_peak_source = np.asarray(
+        [str(entry.get("hough_peak_source", "houghpeaks")) for entry in geofeatures],
+        dtype=str,
+    )
+    if args.hough_localmax_fallback:
+        print(f"Conditional Hough localmax fallback patched {int(np.sum(hough_fallback_used))}/{len(hough_fallback_used)} frames")
     fascicle_persistence = select_fascicle_candidate_persistence(
         geofeatures,
         timtrack_alpha_raw,
@@ -1433,6 +1888,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         super_lines_arr,
         deep_lines_arr,
         kalman_config,
+        prediction_affine_matrices=np.asarray(klt["f_affine_matrices"], dtype=float),
         confidence_arrays=confidence_arrays,
         mm_per_pixel=mm_per_pixel_arg,
     )
@@ -1448,6 +1904,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             super_lines_arr,
             deep_lines_arr,
             kalman_config,
+            prediction_affine_matrices=np.asarray(klt["f_affine_matrices"], dtype=float),
             mm_per_pixel=mm_per_pixel_arg,
         )
         comparison_rows = kalman_comparison_rows(final, fixed_reference)
@@ -1459,6 +1916,16 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "sup_apo_lines": np.asarray(apo_state["super_lines"], dtype=np.float64),
         "deep_apo_lines": np.asarray(apo_state["deep_lines"], dtype=np.float64),
         "klt_prior_segments": fascicle_prior,
+        "klt_affine_ok": np.asarray(klt["f_affine_ok"], dtype=bool),
+        "klt_affine_matrices": np.asarray(klt["f_affine_matrices"], dtype=np.float64),
+        "klt_points_count": np.asarray(klt["f_points_count"], dtype=np.int32),
+        "klt_tracked_count": np.asarray(klt["f_tracked_count"], dtype=np.int32),
+        "klt_inlier_count": np.asarray(klt["f_inlier_count"], dtype=np.int32),
+        "klt_tracker_redetected": np.asarray(klt["tracker_redetected"], dtype=bool),
+        "klt_tracker_found_fraction": np.asarray(klt["tracker_found_fraction"], dtype=np.float64),
+        "klt_tracker_state_points": np.asarray(klt["tracker_state_points"], dtype=object),
+        "klt_tracked_old_points": np.asarray(klt["tracked_old_points"], dtype=object),
+        "klt_tracked_new_points": np.asarray(klt["tracked_new_points"], dtype=object),
         "fascicle_segments": np.asarray(final["fascicle_segments"], dtype=np.float64),
         "fascicle_end_segments": np.asarray(final["fascicle_end_segments"], dtype=np.float64),
         "ANG_deg": np.asarray(final["ANG_deg"], dtype=np.float64),
@@ -1466,6 +1933,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "FL_px": np.asarray(final["FL_px"], dtype=np.float64),
         "timtrack_alpha_deg": timtrack_alpha,
         "raw_timtrack_alpha_deg": timtrack_alpha_raw,
+        "hough_baseline_alpha_deg": hough_baseline_alpha,
+        "hough_localmax_fallback_used": hough_fallback_used,
+        "hough_localmax_fallback_mass_below_10deg": hough_fallback_mass,
+        "hough_localmax_fallback_gap_to_lower_deg": hough_fallback_gap,
+        "hough_peak_source": hough_peak_source,
         "fascicle_candidate_selected_idx": np.asarray(
             fascicle_persistence["selected_candidate_idx"],
             dtype=np.int32,
@@ -1481,6 +1953,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "selected_seed_segment": selected_seed,
         "selected_seed_alpha_deg": np.asarray(selected_alpha, dtype=np.float64),
         "mm_per_pixel": np.asarray(mm_per_px, dtype=np.float64),
+        "measurement_mm_per_pixel": np.asarray(mm_per_px, dtype=np.float64),
         "apo_measurement_states": np.asarray(apo_state["measurement_states"], dtype=np.float64),
         "apo_accepted_measurement_states": np.asarray(apo_state["accepted_measurement_states"], dtype=np.float64),
         "apo_gating_r_scale": np.asarray(apo_state["gating_r_scale"], dtype=np.float64),
@@ -1491,6 +1964,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "apo_gating_reasons": np.asarray(apo_state["gating_reasons"], dtype=str),
         "apo_consecutive_rejections": np.asarray(apo_state["consecutive_rejections"], dtype=np.int32),
     }
+    add_kalman_state_arrays(arrays, final)
     if "FL_mm" in final:
         arrays["FL_mm"] = np.asarray(final["FL_mm"], dtype=np.float64)
     if fixed_reference is not None:
@@ -1499,6 +1973,7 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             fixed_reference["fascicle_end_segments"],
             dtype=np.float64,
         )
+        add_kalman_state_arrays(arrays, fixed_reference, prefix="fixed_")
         for key in ["ANG_deg", "PEN_deg", "FL_px", "FL_mm"]:
             if key not in final or key not in fixed_reference:
                 continue
@@ -1581,6 +2056,11 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
             "FL_px": float(arrays["FL_px"][idx]),
             "TimTrackAlpha": float(timtrack_alpha[idx]),
             "RawTimTrackAlpha": float(timtrack_alpha_raw[idx]),
+            "HoughBaselineAlpha": float(arrays["hough_baseline_alpha_deg"][idx]),
+            "HoughPeakSource": str(arrays["hough_peak_source"][idx]),
+            "HoughLocalmaxFallbackUsed": bool(arrays["hough_localmax_fallback_used"][idx]),
+            "HoughFallbackMassBelow10Deg": float(arrays["hough_localmax_fallback_mass_below_10deg"][idx]),
+            "HoughFallbackGapToLowerDeg": float(arrays["hough_localmax_fallback_gap_to_lower_deg"][idx]),
             "FascicleCandidateIdx": int(arrays["fascicle_candidate_selected_idx"][idx]),
             "FascicleRawRejected": bool(arrays["fascicle_candidate_raw_rejected"][idx]),
             "FascicleSelectionReason": str(arrays["fascicle_candidate_selection_reason"][idx]),
@@ -1656,8 +2136,24 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "apo_fit_maxangle_deep_deg": float(parms["apo"]["deep"].get("maxangle", np.nan)),
         "fas_angle_min_deg": fas_angle_min,
         "fas_angle_max_deg": fas_angle_max,
+        "fas_angle_auto_enabled": bool(args.fas_angle_auto),
+        "fas_angle_auto_applied": bool(fas_angle_auto_applied),
+        "fas_angle_manual_override": bool(manual_fas_angle_override),
+        "fas_angle_auto_candidates": (
+            fascicle_angle_auto_diagnostics(fas_angle_auto_result, (fas_angle_min, fas_angle_max))
+            if fas_angle_auto_result is not None
+            else []
+        ),
         "seed_angle_min_deg": float(seed_config.angle_min_deg),
         "seed_angle_max_deg": float(seed_config.angle_max_deg),
+        "seed_frames_requested": int(args.seed_frames),
+        "seed_frames_used": int(seed_frame_count),
+        "seed_selection_scale_source": "pixel_image_evidence",
+        "seed_length_prior": "disabled_depth_independent",
+        "hough_localmax_fallback": bool(args.hough_localmax_fallback),
+        "hough_fallback_min_mass_below_10deg": float(args.hough_fallback_min_mass_below_10deg),
+        "hough_fallback_min_gap_to_lower_deg": float(args.hough_fallback_min_gap_to_lower_deg),
+        "hough_localmax_fallback_frames": int(np.sum(hough_fallback_used)),
         "candidate_persistence": bool(args.candidate_persistence),
         "max_angle_step_deg": float(args.max_angle_step),
         "candidate_weight_bonus_deg": float(args.candidate_weight_bonus),
@@ -1678,6 +2174,9 @@ def process_video(args: argparse.Namespace) -> dict[str, Path | None]:
         "frames": int(len(frames)),
         "fps": fps,
         "mm_per_pixel": mm_per_px,
+        "measurement_mm_per_pixel": mm_per_px,
+        "measurement_scale_source": measurement_scale_source,
+        "matlab_export_image_depth_mm": matlab_image_depth_mm,
         "selected_seed_alpha_deg": selected_alpha,
         "selected_seed_segment": selected_seed.tolist(),
         "selected_cluster_id": selected_cluster,

@@ -1,3 +1,0 @@
-quantity,median,p95,unit
-abs d(faslen)/d(phi_deg),21.79911800943917,35.73491944774427,px per deg
-d(faslen)/d(thickness_px),2.286216945498327,2.84346067832341,px per px

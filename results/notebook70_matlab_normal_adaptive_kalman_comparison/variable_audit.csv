@@ -1,4 +1,0 @@
-concept,MATLAB variable,Python normal variable,Python adaptive variable,unit,MATLAB alias max abs diff
-fascicle length,Fdat.Region.fas_length == Fdat.Region.FL,fixed_FL_mm,FL_mm,mm,0.0
-fascicle angle,Fdat.Region.fas_ang == Fdat.Region.ANG,fixed_ANG_deg,ANG_deg,deg,0.0
-pennation angle,Fdat.Region.fas_pen == Fdat.Region.PEN,fixed_PEN_deg,PEN_deg,deg,0.0

@@ -27,7 +27,7 @@ from .matlab_aponeurosis import (
     fit_apo_matlab_like,
     matlab_round_positive,
 )
-from .timtrack_hough import DoHoughParams, dohough, weighted_median
+from .timtrack_hough import DoHoughParams, dohough, dohough_with_localmax_fallback, weighted_median
 
 
 def _as_entry_list(geofeatures: object) -> list[Mapping]:
@@ -535,6 +535,9 @@ def detect_timtrack_geofeature_from_image(
     *,
     subtraction_mode: str = "matlab_literal",
     emask_mode: str = "matlab",
+    hough_localmax_fallback: bool = False,
+    hough_fallback_min_mass_below_10deg: float = 0.25,
+    hough_fallback_min_gap_to_lower_deg: float = 4.0,
 ) -> dict:
     """
     Generate one TimTrack-like geofeature entry directly from an image frame.
@@ -575,18 +578,24 @@ def detect_timtrack_geofeature_from_image(
             emask_source = "parms.fas.Emask"
 
     fascicle_masked = filtered["fas_thres"] & emask
-    hough = dohough(
-        fascicle_masked,
-        DoHoughParams(
-            houghangles=str(fas_parms["houghangles"]),
-            angle_range=tuple(np.asarray(fas_parms["range"], dtype=np.float64).reshape(-1)),
-            thetares=float(fas_parms["thetares"]),
-            rhores=float(fas_parms["rhores"]),
-            emask_radius=emask_radius,
-            npeaks=int(fas_parms["npeaks"]),
-            replace_diagonal_bias=True,
-        ),
+    hough_params = DoHoughParams(
+        houghangles=str(fas_parms["houghangles"]),
+        angle_range=tuple(np.asarray(fas_parms["range"], dtype=np.float64).reshape(-1)),
+        thetares=float(fas_parms["thetares"]),
+        rhores=float(fas_parms["rhores"]),
+        emask_radius=emask_radius,
+        npeaks=int(fas_parms["npeaks"]),
+        replace_diagonal_bias=True,
     )
+    if hough_localmax_fallback:
+        hough = dohough_with_localmax_fallback(
+            fascicle_masked,
+            hough_params,
+            min_mass_below_10deg=float(hough_fallback_min_mass_below_10deg),
+            min_gap_to_lower_deg=float(hough_fallback_min_gap_to_lower_deg),
+        )
+    else:
+        hough = dohough(fascicle_masked, hough_params)
     alpha = float(hough["alpha"])
 
     apox = np.asarray(filtered["apox_1b"], dtype=np.float64).reshape(-1)
@@ -691,6 +700,15 @@ def detect_timtrack_geofeature_from_image(
         "fascicle_masked": fascicle_masked,
         "filtered": filtered,
         "hough_result": hough,
+        "hough_peak_source": str(hough.get("selected_peak_source", hough.get("peak_source", "houghpeaks"))),
+        "hough_localmax_fallback_used": bool(hough.get("localmax_fallback_used", False)),
+        "hough_localmax_fallback_mass_below_10deg": float(
+            hough.get("localmax_fallback_mass_below_10deg", np.nan)
+        ),
+        "hough_localmax_fallback_gap_to_lower_deg": float(
+            hough.get("localmax_fallback_gap_to_lower_deg", np.nan)
+        ),
+        "hough_baseline_alpha_deg": float(hough.get("baseline_alpha", alpha)),
         "image_shape": (n_rows, n_cols),
     }
 
@@ -782,6 +800,11 @@ def compact_timtrack_geofeature(entry: Mapping[str, Any], *, max_peaks: int = 10
         "Emask_radius",
         "mean_depths",
         "image_shape",
+        "hough_peak_source",
+        "hough_localmax_fallback_used",
+        "hough_localmax_fallback_mass_below_10deg",
+        "hough_localmax_fallback_gap_to_lower_deg",
+        "hough_baseline_alpha_deg",
     ]:
         if key in entry:
             out[key] = entry[key]
@@ -812,6 +835,9 @@ def run_timtrack_geofeatures_from_video(
     limit: Optional[int] = None,
     subtraction_mode: str = "matlab_literal",
     emask_mode: str = "matlab",
+    hough_localmax_fallback: bool = False,
+    hough_fallback_min_mass_below_10deg: float = 0.25,
+    hough_fallback_min_gap_to_lower_deg: float = 4.0,
     keep_debug: bool = False,
     progress_every: Optional[int] = None,
 ) -> list[dict]:
@@ -832,6 +858,9 @@ def run_timtrack_geofeatures_from_video(
             parms,
             subtraction_mode=subtraction_mode,
             emask_mode=emask_mode,
+            hough_localmax_fallback=hough_localmax_fallback,
+            hough_fallback_min_mass_below_10deg=hough_fallback_min_mass_below_10deg,
+            hough_fallback_min_gap_to_lower_deg=hough_fallback_min_gap_to_lower_deg,
         )
         entry["frame"] = frame_idx
         entries.append(entry if keep_debug else compact_timtrack_geofeature(entry))
