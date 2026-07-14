@@ -1,4 +1,0 @@
-metric,key,unit,n_valid,mean_delta,mean_abs_delta,median_abs_delta,rmse_delta,max_abs_delta
-ANG,ANG_deg,deg,220,0.0,0.0,0.0,0.0,0.0
-PEN,PEN_deg,deg,220,0.0,0.0,0.0,0.0,0.0
-FL,FL_mm,mm,220,0.0,0.0,0.0,0.0,0.0

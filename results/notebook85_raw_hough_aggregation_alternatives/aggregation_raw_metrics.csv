@@ -1,6 +1,0 @@
-variant,note,recomputed_vs_saved_python_raw_rmse_deg,raw_vs_matlab_bias,raw_vs_matlab_mae,raw_vs_matlab_rmse
-weighted_median_current,current raw rule,0.0,1.1877344336084021,1.5572018004501125,2.8086479622487333
-weighted_mean,"same candidates, weighted mean",2.6223200626743806,-0.5760437927356581,2.1295337348732137,2.905065726659798
-weighted_q25,"same candidates, weighted 25th percentile",7.1369756623797835,-4.016316579144786,4.295386346586647,6.485058422688759
-weighted_q30,"same candidates, weighted 30th percentile",4.782438491970636,-1.8385221305326331,2.539947486871718,4.457549628122136
-top_peak,"same candidates, strongest single peak",3.913604198747762,0.7295573893473368,2.4261065266316577,4.485786505189758

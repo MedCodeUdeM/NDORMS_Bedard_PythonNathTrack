@@ -1,6 +1,0 @@
-variant,description,uses_local_klt,uses_reference_alpha,FL_rmse_mm,PEN_rmse_deg,ANG_rmse_deg,passes_final_gate
-current_scaffold,sequential Python KLT + current Python TimTrack alpha + MATLAB aponeuroses,False,False,11.208491029219624,5.429017109199198,5.429017109199199,False
-klt_corrected_only,notebook45 local one-step Python KLT + current Python TimTrack alpha + MATLAB aponeuroses,True,False,10.327051272212927,4.29996127661407,4.29996127661407,False
-alpha_corrected_only,sequential Python KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,False,True,6.868819502554928,3.292757937521781,3.2927579375217806,False
-corrected_handoff,notebook45 local one-step Python KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,True,True,0.7529551324064312,0.409723832187515,0.40972383218751485,True
-oracle_matlab_inputs,MATLAB raw KLT + MATLAB TimTrack alpha + MATLAB aponeuroses,False,True,0.5603162940100396,0.26566580622257935,0.26566580622257935,True

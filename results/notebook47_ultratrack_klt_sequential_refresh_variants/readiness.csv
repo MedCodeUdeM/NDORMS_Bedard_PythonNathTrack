@@ -1,5 +1,0 @@
-gate,status,ready_for_next
-TimTrack mask/doHough,passed,True
-KLT local one-step affine,near-pass and stable across persistent/redetect point policies,True
-KLT sequential raw parity,not passed; cumulative affine integration drifts even with re-detect every step,False
-MATLAB 2-state Kalman,"next downstream correction candidate, but keep separate from KLT raw gate",True

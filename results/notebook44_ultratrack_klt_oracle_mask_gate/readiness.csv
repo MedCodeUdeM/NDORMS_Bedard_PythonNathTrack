@@ -1,4 +1,0 @@
-gate,status,use_for_next
-TimTrack mask/doHough,passed in notebook 42/43,True
-UltraTrack/KLT oracle-mask prototype,improved but not passed,True
-MATLAB 2-state Kalman,not started; keep separate from current 4-state filter,False

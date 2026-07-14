@@ -1,4 +1,0 @@
-comparison,n,bias,mae,rmse,corr
-alpha: weightedMedian(saved alphas/ws),2666,0.0,0.0,0.0,0.9999999999999999
-phi: alpha - betha,2666,0.0,0.0,0.0,1.0
-faslen: thickness / sind(phi),2666,1.4775877445813935e-14,1.4775877445813935e-14,4.250978808458335e-14,0.9999999999999999
