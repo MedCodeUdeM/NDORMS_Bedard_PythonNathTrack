@@ -9,14 +9,15 @@ This run compares MATLAB final outputs against Python normal fixed-R Kalman and 
 - Strict result NPZ: `/Users/grosbedou/PycharmProjects/NDORMS/results/notebook94_final_kalman_matlab_comparison/python_localmax_adaptive/UltraTimTrack_test/UltraTimTrack_test_strict_results.npz`
 - Hough localmax fallback: enabled, mass_below_10deg >= 0.25, gap_to_lower_deg >= 4.0
 - Fascicle angle range: 5 to 60 deg
-- Compared frames: 2666 with Python offset 1
+- Compared frames: 2666 with Python offset 0
+- Alignment basis: explicit physical-frame alignment; MATLAB timestamps are one-based
 - Localmax fallback frames in raw run: 175
 
 ## Key metrics
 
-- Best ANG_deg: `Python normal Kalman` RMSE 0.8345 deg
-- Best PEN_deg: `Python adaptive Kalman` RMSE 0.8412 deg
-- Best FL_mm: `Python adaptive Kalman` RMSE 1.4347 mm
+- Best ANG_deg: `Python normal Kalman` RMSE 0.8218 deg
+- Best PEN_deg: `Python adaptive Kalman` RMSE 0.8418 deg
+- Best FL_mm: `Python adaptive Kalman` RMSE 1.4216 mm
 
 ## Outputs
 
