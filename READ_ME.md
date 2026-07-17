@@ -9,6 +9,11 @@ pipeline.
 python -m venv .venv
 ./.venv/bin/python -m pip install -r requirements
 ./.venv/bin/python scripts/strict_ultratimtrack_gui.py
+
+if it doesn't work, try:
+
+cd /Users/grosbedou/PycharmProjects/NDORMS
+./.venv/bin/python scripts/strict_ultratimtrack_gui.py
 ```
 
 The GUI writes each analysis to `results/strict_ultratimtrack_runs/<video-name>/`

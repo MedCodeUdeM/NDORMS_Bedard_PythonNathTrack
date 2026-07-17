@@ -1391,7 +1391,7 @@ def save_confidence_plot(path: Path, arrays: Mapping[str, np.ndarray]) -> None:
     plt.close(fig)
 
 
-def parse_args() -> argparse.Namespace:
+def build_arg_parser() -> argparse.ArgumentParser:
     default_export = DEFAULT_UTT_EXPORT if DEFAULT_UTT_EXPORT.exists() else LEGACY_UTT_EXPORT
     parser = argparse.ArgumentParser(description="Run strict Python UltraTimTrack and write an annotated video.")
     parser.add_argument("video", nargs="?", type=Path, default=None, help="Video path. Omit with --interactive.")
@@ -1547,7 +1547,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mm-per-pixel", type=float, default=None, help="Override pixel scale.")
     parser.add_argument("--image-depth-mm", type=float, default=None, help="Image depth; used if --mm-per-pixel is absent.")
     parser.add_argument("--progress-every", type=int, default=250)
-    args = parser.parse_args()
+    return parser
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
     kalman_mode_from_cli = args.kalman_mode is not None or bool(args.adaptive_r)
     annotate_comparison_from_cli = bool(args.annotate_kalman_comparison)
     compare_from_cli = bool(args.compare_to_fixed_kalman or annotate_comparison_from_cli)

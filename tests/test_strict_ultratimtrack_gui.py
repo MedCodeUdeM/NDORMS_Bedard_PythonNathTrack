@@ -3,13 +3,30 @@ import zipfile
 import numpy as np
 import pytest
 
+from scripts.run_strict_ultratimtrack_video import build_arg_parser as build_runner_arg_parser
 from scripts.strict_ultratimtrack_gui import (
     _has_metric_values,
     _match_speckle_point_with_fb,
     _read_metrics_csv,
+    _runner_namespace,
     _speckle_config_from_box,
     _write_simple_xlsx,
 )
+
+
+def test_gui_runner_namespace_tracks_all_runner_defaults():
+    runner_defaults = vars(build_runner_arg_parser().parse_args([]))
+
+    gui_args = _runner_namespace(seed_frames=17)
+
+    assert set(vars(gui_args)) == set(runner_defaults)
+    assert gui_args.seed_frames == 17
+    assert gui_args.seed_angle_range is None
+
+
+def test_gui_runner_namespace_rejects_unknown_fields():
+    with pytest.raises(TypeError, match="Unknown strict runner argument"):
+        _runner_namespace(no_longer_a_runner_option=True)
 
 
 def test_read_metrics_csv_loads_fixed_kalman_comparison_columns(tmp_path):
